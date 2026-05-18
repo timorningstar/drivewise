@@ -75,5 +75,5 @@ GitHub mirror can run without Cloud Functions on GitHub.
 
 ## Next build step
 
-Configure the live Firebase project so DriveWise can deploy this DriveWise-only
-function independently from the meal signup function.
+This app now deploys its own Firebase Functions codebase and Hosting rewrite,
+separate from DTM Meal Signup.

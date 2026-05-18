@@ -351,7 +351,7 @@ function routePath(request) {
   return path.replace(/^\/api/, "") || "/";
 }
 
-exports.api = onRequest({cors: true, invoker: "public"}, async (request, response) => {
+exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request, response) => {
   try {
     const path = routePath(request);
 

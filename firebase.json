@@ -8,7 +8,7 @@
   "functions": [
     {
       "source": "functions",
-      "codebase": "default",
+      "codebase": "drivewise",
       "disallowLegacyRuntimeConfig": true,
       "ignore": [
         "node_modules",
@@ -30,7 +30,7 @@
     "rewrites": [
       {
         "source": "/api/**",
-        "function": "api"
+        "function": "drivewiseApi"
       },
       {
         "source": "**",
