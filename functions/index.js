@@ -183,10 +183,35 @@ async function drivewiseState(session) {
     role: session.role,
     username: session.username,
     title: "Downtown Ministries DriveWise",
-    repairs: state.repairs || [],
-    paymentBatches: state.paymentBatches || [],
+    mainAdminUsername: state.adminCredentials?.username || "admin",
+    repairs: session.role === "recovery" ? [] : state.repairs || [],
+    paymentBatches: session.role === "recovery" ? [] : state.paymentBatches || [],
     adminLog: state.adminLog || [],
   };
+}
+
+async function updateMainAdminAccount(request, session) {
+  const username = clean(request.body?.username);
+  const password = clean(request.body?.password);
+  if (!username) return {ok: false, error: "Enter a full-admin login name."};
+  if (password && password.length < 6) return {ok: false, error: "New password must be at least 6 characters."};
+
+  const state = await readState();
+  state.adminCredentials = {
+    ...state.adminCredentials,
+    username,
+    ...(password ? {passwordHash: hashPassword(password), forcePasswordChange: true} : {}),
+  };
+  logStateChange(
+    state,
+    session.username,
+    "Update DriveWise full-admin account",
+    password
+      ? `${session.username} reset the DriveWise full-admin password.`
+      : `${session.username} updated the DriveWise full-admin login name.`,
+  );
+  await writeState(state);
+  return drivewiseState(session);
 }
 
 async function saveDrivewiseRepair(request, session) {
@@ -367,8 +392,15 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     }
 
     if (request.method === "GET" && path === "/drivewise-state") {
-      const session = await requireAdmin(request, ["full", "schedule", "accounting"]);
+      const session = await requireAdmin(request, ["full", "schedule", "accounting", "recovery"]);
       sendJson(response, 200, await drivewiseState(session));
+      return;
+    }
+
+    if (request.method === "POST" && path === "/admin-main-account") {
+      const session = await requireAdmin(request, ["full", "recovery"]);
+      const result = await updateMainAdminAccount(request, session);
+      sendJson(response, result.ok ? 200 : 400, result);
       return;
     }
 

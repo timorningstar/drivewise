@@ -26,6 +26,7 @@ function DrivewiseAdminApp() {
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
   const [filters, setFilters] = useState({ vendor: 'all', status: 'all' })
+  const [accountForm, setAccountForm] = useState({ username: '', password: '' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -45,6 +46,7 @@ function DrivewiseAdminApp() {
       throw new Error(payload.error || 'DriveWise admin session expired.')
     }
     setData(payload)
+    setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
     setError('')
   }
 
@@ -59,9 +61,6 @@ function DrivewiseAdminApp() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Invalid admin login.')
-      if (payload.role === 'recovery') {
-        throw new Error('Recovery admin cannot manage DriveWise records.')
-      }
       sessionStorage.setItem(DRIVEWISE_TOKEN_KEY, payload.token)
       setToken(payload.token)
       setLogin({ username: '', password: '' })
@@ -144,6 +143,28 @@ function DrivewiseAdminApp() {
     }
   }
 
+  const saveMainAccount = async (event) => {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+    try {
+      const response = await fetch(apiUrl(`/api/admin-main-account?app=${DRIVEWISE_APP_ID}`), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(accountForm),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'Full-admin account could not be updated.')
+      }
+      setData(payload)
+      setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
+      setMessage('Full-admin account updated.')
+    } catch (accountError) {
+      setError(accountError.message)
+    }
+  }
+
   const addInvoice = () => {
     setRepairForm((current) => ({
       ...current,
@@ -184,6 +205,8 @@ function DrivewiseAdminApp() {
   const repairs = data?.repairs || []
   const canManageDrivewiseRepairs = ['full', 'schedule'].includes(data?.role)
   const canManageDrivewiseAccounting = ['full', 'accounting'].includes(data?.role)
+  const canManageMainAccount = ['full', 'recovery'].includes(data?.role)
+  const canViewDrivewiseRecords = data?.role !== 'recovery'
   const invoices = repairs.flatMap((repair) =>
     (repair.invoices || []).map((invoice) => ({ ...invoice, repair })),
   )
@@ -251,8 +274,9 @@ function DrivewiseAdminApp() {
           <p className="eyebrow">DriveWise</p>
           <h1>Invoice Dashboard</h1>
           <p className="intro">
-            Signed in as {data.username}. Manage repair face sheets, invoice
-            tracking, vendor statement checks, and payment batches.
+            Signed in as {data.username}. {data.role === 'recovery'
+              ? 'Recover the full-admin account without opening DriveWise records.'
+              : 'Manage repair face sheets, invoice tracking, vendor statement checks, and payment batches.'}
           </p>
           <div className="header-actions">
             <button className="secondary-action" onClick={logout} type="button">Log out</button>
@@ -261,6 +285,43 @@ function DrivewiseAdminApp() {
       </header>
 
       <section className="admin-shell drivewise-shell">
+        {canManageMainAccount && (
+        <section className="panel admin-account-panel">
+          <div className="section-heading">
+            <p className="eyebrow">Admin account</p>
+            <h2>Main Full-Admin Account</h2>
+          </div>
+          <form onSubmit={saveMainAccount}>
+            <div className="field-grid">
+              <label>
+                Login name
+                <input
+                  onChange={(event) =>
+                    setAccountForm((current) => ({ ...current, username: event.target.value }))
+                  }
+                  required
+                  value={accountForm.username}
+                />
+              </label>
+              <label>
+                New temporary password
+                <input
+                  onChange={(event) =>
+                    setAccountForm((current) => ({ ...current, password: event.target.value }))
+                  }
+                  placeholder="Leave blank to keep current"
+                  type="password"
+                  value={accountForm.password}
+                />
+              </label>
+            </div>
+            <button className="primary-action" type="submit">
+              Save full-admin account
+            </button>
+          </form>
+        </section>
+        )}
+
         {canManageDrivewiseRepairs && (
         <form className="panel admin-editor" onSubmit={saveRepair}>
           <div className="section-heading admin-heading-row">
@@ -401,6 +462,7 @@ function DrivewiseAdminApp() {
         </form>
         )}
 
+        {canViewDrivewiseRecords && (
         <section className="panel printable-schedule">
           <div className="section-heading admin-heading-row no-print">
             <div>
@@ -490,7 +552,9 @@ function DrivewiseAdminApp() {
             </tbody>
           </table>
         </section>
+        )}
 
+        {canViewDrivewiseRecords && (
         <section className="panel">
           <div className="section-heading">
             <p className="eyebrow">Repairs</p>
@@ -513,6 +577,7 @@ function DrivewiseAdminApp() {
             ))}
           </div>
         </section>
+        )}
 
         {message && <p className="success-message admin-message">{message}</p>}
         {error && <p className="error-message admin-message">{error}</p>}
