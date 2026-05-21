@@ -68,7 +68,7 @@ function normalizeState(input) {
     regularAdmins: Array.isArray(source.regularAdmins)
       ? source.regularAdmins.map((record) => ({
         ...normalizeCredentialRecord(record),
-        accessLevel: ["full", "schedule", "accounting"].includes(record?.accessLevel) ? record.accessLevel : "schedule",
+        accessLevel: ["full", "admin", "schedule", "accounting"].includes(record?.accessLevel) ? record.accessLevel : "schedule",
       }))
       : [],
   };
@@ -107,7 +107,7 @@ async function adminLogin(request) {
       && credentialMatches(record, passwordHash, password)
     ));
     if (regularAdmin) {
-      role = ["full", "schedule", "accounting"].includes(regularAdmin.accessLevel)
+      role = ["full", "admin", "schedule", "accounting"].includes(regularAdmin.accessLevel)
         ? regularAdmin.accessLevel
         : "schedule";
       adminId = regularAdmin.id;
@@ -184,6 +184,14 @@ async function drivewiseState(session) {
     username: session.username,
     title: "Downtown Ministries DriveWise",
     mainAdminUsername: state.adminCredentials?.username || "admin",
+    regularAdmins: session.role === "full"
+      ? (state.regularAdmins || []).map((adminRecord) => ({
+        id: adminRecord.id,
+        username: adminRecord.username,
+        accessLevel: adminRecord.accessLevel || "schedule",
+        createdAt: adminRecord.createdAt || "",
+      }))
+      : [],
     repairs: session.role === "recovery" ? [] : state.repairs || [],
     paymentBatches: session.role === "recovery" ? [] : state.paymentBatches || [],
     adminLog: state.adminLog || [],
@@ -210,6 +218,55 @@ async function updateMainAdminAccount(request, session) {
       ? `${session.username} reset the DriveWise full-admin password.`
       : `${session.username} updated the DriveWise full-admin login name.`,
   );
+  await writeState(state);
+  return drivewiseState(session);
+}
+
+async function addRegularAdmin(request, session) {
+  const username = clean(request.body?.username);
+  const password = clean(request.body?.password);
+  const accessLevel = ["admin", "schedule", "accounting"].includes(clean(request.body?.accessLevel))
+    ? clean(request.body?.accessLevel)
+    : "admin";
+  if (!username || !password) return {ok: false, error: "Enter a login name and password."};
+  if (password.length < 6) return {ok: false, error: "Password must be at least 6 characters."};
+
+  const state = await readState();
+  const normalizedUsername = normalizeAdminLogin(username);
+  const existingRegularAdmin = (state.regularAdmins || []).some((adminRecord) =>
+    normalizeAdminLogin(adminRecord.username) === normalizedUsername,
+  );
+  if (
+    normalizeAdminLogin(state.adminCredentials?.username) === normalizedUsername ||
+    normalizeAdminLogin(state.recoveryAdminCredentials?.username) === normalizedUsername ||
+    existingRegularAdmin
+  ) {
+    return {ok: false, error: "That login name is already in use."};
+  }
+
+  state.regularAdmins = [
+    ...(state.regularAdmins || []),
+    {
+      id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      username,
+      passwordHash: hashPassword(password),
+      accessLevel,
+      createdAt: new Date().toISOString(),
+      forcePasswordChange: false,
+    },
+  ];
+  logStateChange(state, session.username, "Add DriveWise admin account", `${session.username} added ${username} as ${accessLevel}.`);
+  await writeState(state);
+  return drivewiseState(session);
+}
+
+async function deleteRegularAdmin(request, session) {
+  const adminId = clean(request.body?.id);
+  const state = await readState();
+  const target = (state.regularAdmins || []).find((adminRecord) => adminRecord.id === adminId);
+  if (!target) return {ok: false, error: "Admin account was not found."};
+  state.regularAdmins = state.regularAdmins.filter((adminRecord) => adminRecord.id !== adminId);
+  logStateChange(state, session.username, "Delete DriveWise admin account", `${session.username} deleted admin account ${target.username}.`);
   await writeState(state);
   return drivewiseState(session);
 }
@@ -392,7 +449,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     }
 
     if (request.method === "GET" && path === "/drivewise-state") {
-      const session = await requireAdmin(request, ["full", "schedule", "accounting", "recovery"]);
+      const session = await requireAdmin(request, ["full", "admin", "schedule", "accounting", "recovery"]);
       sendJson(response, 200, await drivewiseState(session));
       return;
     }
@@ -404,29 +461,43 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
       return;
     }
 
+    if (request.method === "POST" && path === "/admin-regular-admins") {
+      const session = await requireAdmin(request, ["full"]);
+      const result = await addRegularAdmin(request, session);
+      sendJson(response, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (request.method === "POST" && path === "/admin-delete-regular-admin") {
+      const session = await requireAdmin(request, ["full"]);
+      const result = await deleteRegularAdmin(request, session);
+      sendJson(response, result.ok ? 200 : 400, result);
+      return;
+    }
+
     if (request.method === "POST" && path === "/drivewise-repair") {
-      const session = await requireAdmin(request, ["full", "schedule"]);
+      const session = await requireAdmin(request, ["full", "admin", "schedule"]);
       const result = await saveDrivewiseRepair(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }
 
     if (request.method === "POST" && path === "/drivewise-delete-repair") {
-      const session = await requireAdmin(request, ["full", "schedule"]);
+      const session = await requireAdmin(request, ["full", "admin", "schedule"]);
       const result = await deleteDrivewiseRepair(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }
 
     if (request.method === "POST" && path === "/drivewise-invoice-status") {
-      const session = await requireAdmin(request, ["full", "accounting"]);
+      const session = await requireAdmin(request, ["full", "admin", "accounting"]);
       const result = await updateDrivewiseInvoiceStatus(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }
 
     if (request.method === "POST" && path === "/drivewise-payment-batch") {
-      const session = await requireAdmin(request, ["full", "accounting"]);
+      const session = await requireAdmin(request, ["full", "admin", "accounting"]);
       const result = await createDrivewisePaymentBatch(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
