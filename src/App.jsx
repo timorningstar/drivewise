@@ -308,6 +308,14 @@ function DrivewiseAdminApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const startNewRepair = () => {
+    setRepairForm(emptyDrivewiseRepair())
+    setMessage('')
+    setError('')
+    setActiveView('entry')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const logout = () => {
     sessionStorage.removeItem(DRIVEWISE_TOKEN_KEY)
     setToken('')
@@ -523,7 +531,7 @@ function DrivewiseAdminApp() {
             <nav className="top-menu">
               <button
                 className={activeView === 'entry' ? 'active' : ''}
-                onClick={() => setActiveView('entry')}
+                onClick={startNewRepair}
                 type="button"
               >
                 New Repair Record
