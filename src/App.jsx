@@ -238,7 +238,7 @@ function DrivewiseAdminApp() {
       fileName: file.name,
       fileContentType: file.type,
       fileData: dataUrl.split(',')[1],
-      filePreviewUrl: file.type.startsWith('image/') ? dataUrl : '',
+      filePreviewUrl: dataUrl,
     })
   }
 
@@ -335,6 +335,14 @@ function DrivewiseAdminApp() {
       name: invoice.invoiceFile.name || 'invoice',
     })
     return apiUrl(`/api/drivewise-invoice-download?${params.toString()}`)
+  }
+  const invoicePreview = (invoice) => {
+    const href = invoice.filePreviewUrl || invoiceFileHref(invoice)
+    const contentType = invoice.fileContentType || invoice.invoiceFile?.contentType || ''
+    if (!href) return null
+    if (contentType.startsWith('image/')) return { href, type: 'image' }
+    if (contentType === 'application/pdf') return { href, type: 'pdf' }
+    return null
   }
   const openInvoices = invoices.filter((invoice) => !invoice.statementComplete)
   const filteredInvoices = invoices.filter((invoice) => {
@@ -720,11 +728,18 @@ function DrivewiseAdminApp() {
                     )}
                   </label>
                 </div>
-                {invoice.filePreviewUrl && (
+                {invoicePreview(invoice)?.type === 'image' && (
                   <img
                     alt={`Invoice ${index + 1} preview`}
                     className="receipt-preview"
-                    src={invoice.filePreviewUrl}
+                    src={invoicePreview(invoice).href}
+                  />
+                )}
+                {invoicePreview(invoice)?.type === 'pdf' && (
+                  <iframe
+                    className="invoice-pdf-preview"
+                    src={invoicePreview(invoice).href}
+                    title={`Invoice ${index + 1} PDF preview`}
                   />
                 )}
               </div>

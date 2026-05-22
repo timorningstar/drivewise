@@ -422,6 +422,15 @@ button:focus-visible {
   object-fit: contain;
 }
 
+.invoice-pdf-preview {
+  border: 1px solid #d7dee6;
+  border-radius: 8px;
+  display: block;
+  height: 520px;
+  margin-top: 14px;
+  width: 100%;
+}
+
 dl {
   display: grid;
   gap: 16px;
