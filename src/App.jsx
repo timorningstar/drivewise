@@ -893,6 +893,7 @@ function DrivewiseAdminApp() {
                     <th>Vendor</th>
                     <th>Invoice #</th>
                     <th>Cost</th>
+                    <th className="no-print">Statement</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -901,6 +902,16 @@ function DrivewiseAdminApp() {
                       <td>{invoice.vendor}</td>
                       <td>{invoice.invoiceNumber}</td>
                       <td>{formatCurrency(invoice.cost)}</td>
+                      <td className="no-print">
+                        <input
+                          checked={invoice.statementChecked}
+                          disabled={!canManageDrivewiseAccounting}
+                          onChange={(event) =>
+                            toggleInvoiceStatus(invoice.repair.id, invoice, { statementChecked: event.target.checked })
+                          }
+                          type="checkbox"
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
