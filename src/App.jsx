@@ -489,7 +489,7 @@ function DrivewiseAdminApp() {
 
           <div className="field-grid">
             <label>
-              Repair date
+              Repair date *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, repairDate: event.target.value }))
@@ -500,7 +500,7 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Owner name
+              Owner name *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, ownerName: event.target.value }))
@@ -519,7 +519,7 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Year
+              Year *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, year: event.target.value }))
@@ -530,7 +530,7 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Make
+              Make *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, make: event.target.value }))
@@ -541,7 +541,7 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Model
+              Model *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, model: event.target.value }))
@@ -554,7 +554,7 @@ function DrivewiseAdminApp() {
           </div>
 
           <label>
-            Needed repairs
+            Needed repairs *
             <textarea
               onChange={(event) =>
                 setRepairForm((current) => ({ ...current, neededRepairs: event.target.value }))
@@ -624,7 +624,7 @@ function DrivewiseAdminApp() {
                     />
                   </label>
                   <label className="camera-upload-label">
-                    Invoice image or PDF
+                    Invoice image or PDF *
                     <input
                       accept="image/jpeg,image/png,application/pdf"
                       capture="environment"
