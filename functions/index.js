@@ -9,7 +9,11 @@ setGlobalOptions({maxInstances: 10});
 
 const db = admin.firestore();
 const storage = admin.storage();
-const storageBucketName = process.env.STORAGE_BUCKET || "dtmcleaners.appspot.com";
+const storageBucketNames = [
+  process.env.STORAGE_BUCKET,
+  "dtmcleaners.firebasestorage.app",
+  "dtmcleaners.appspot.com",
+].filter(Boolean);
 const APP_ID = "drivewise";
 const adminSessionCollection = db.collection("adminSessions");
 
@@ -208,7 +212,7 @@ async function enrichDrivewiseRepairs(repairs) {
       invoiceFile: invoice.invoiceFile?.storagePath
         ? {
           ...invoice.invoiceFile,
-          url: await signedStorageUrl(invoice.invoiceFile.storagePath),
+          url: await signedStorageUrl(invoice.invoiceFile.storagePath, invoice.invoiceFile.bucket),
         }
         : invoice.invoiceFile || null,
     }))),
@@ -448,6 +452,7 @@ function sanitizeDrivewiseRepair(input) {
         name: clean(invoice.invoiceFile.name),
         contentType: clean(invoice.invoiceFile.contentType),
         storagePath: clean(invoice.invoiceFile.storagePath),
+        bucket: clean(invoice.invoiceFile.bucket),
       } : null,
       statementChecked: Boolean(invoice.statementChecked),
       paid: Boolean(invoice.paid),
@@ -477,12 +482,7 @@ async function saveDrivewiseInvoiceFiles(repairId, invoices) {
       ? "pdf"
       : invoice.fileContentType === "image/png" ? "png" : "jpg";
     const storagePath = `drivewiseInvoices/${repairId}/${invoice.id || `invoice-${index + 1}`}.${extension}`;
-    await storage.bucket(storageBucketName).file(storagePath).save(buffer, {
-      contentType: invoice.fileContentType,
-      metadata: {
-        cacheControl: "private, max-age=0, no-transform",
-      },
-    });
+    const bucketName = await saveInvoiceBufferToStorage(storagePath, buffer, invoice.fileContentType);
     const storedInvoice = {...invoice};
     delete storedInvoice.fileData;
     delete storedInvoice.fileContentType;
@@ -493,23 +493,53 @@ async function saveDrivewiseInvoiceFiles(repairId, invoices) {
         name: invoice.fileName || `Invoice ${index + 1}`,
         contentType: invoice.fileContentType,
         storagePath,
+        bucket: bucketName,
       },
     };
   }));
 }
 
-async function signedStorageUrl(path) {
-  if (!path) return "";
-  try {
-    const [url] = await storage.bucket(storageBucketName).file(path).getSignedUrl({
-      action: "read",
-      expires: Date.now() + 60 * 60 * 1000,
-    });
-    return url;
-  } catch (error) {
-    logger.warn("Could not create DriveWise invoice URL", {path, error: error.message});
-    return "";
+async function saveInvoiceBufferToStorage(storagePath, buffer, contentType) {
+  let lastError = null;
+  for (const bucketName of storageBucketNames) {
+    try {
+      await storage.bucket(bucketName).file(storagePath).save(buffer, {
+        contentType,
+        metadata: {
+          cacheControl: "private, max-age=0, no-transform",
+        },
+      });
+      return bucketName;
+    } catch (error) {
+      lastError = error;
+      if (!isMissingBucketError(error)) throw error;
+    }
   }
+  throw new Error(
+    "Firebase Storage is not set up for this project. Open Firebase Storage in the console and click Get started, then try saving again.",
+    {cause: lastError},
+  );
+}
+
+async function signedStorageUrl(path, bucketName = "") {
+  if (!path) return "";
+  const bucketNames = bucketName ? [bucketName] : storageBucketNames;
+  for (const candidateBucketName of bucketNames) {
+    try {
+      const [url] = await storage.bucket(candidateBucketName).file(path).getSignedUrl({
+        action: "read",
+        expires: Date.now() + 60 * 60 * 1000,
+      });
+      return url;
+    } catch (error) {
+      logger.warn("Could not create DriveWise invoice URL", {path, bucket: candidateBucketName, error: error.message});
+    }
+  }
+  return "";
+}
+
+function isMissingBucketError(error) {
+  return error?.code === 404 || /bucket does not exist|not found/i.test(error?.message || "");
 }
 
 function logStateChange(state, actor, action, details) {
