@@ -384,7 +384,7 @@ button:focus-visible {
   min-height: 46px;
   padding: 12px 14px;
   text-align: center;
-  width: 100%;
+  width: min(100%, 340px);
 }
 
 .camera-upload-label:focus-within .camera-upload-button,
@@ -563,6 +563,15 @@ dd {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 24px;
+}
+
+.form-action-row .secondary-action {
+  background: #f7e8d8;
+  border-color: #b96a31;
+  color: #6f3514;
+  min-height: 50px;
+  text-align: center;
+  width: min(100%, 340px);
 }
 
 .form-action-row .primary-action {

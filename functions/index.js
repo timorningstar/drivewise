@@ -438,6 +438,25 @@ async function completeDrivewiseStatement(request, session) {
   return drivewiseState(session);
 }
 
+async function purgeDrivewiseRepairData(session) {
+  const state = await readState();
+  const repairCount = (state.repairs || []).length;
+  const invoiceCount = (state.repairs || []).reduce(
+    (total, repair) => total + ((repair.invoices || []).length),
+    0,
+  );
+  state.repairs = [];
+  state.paymentBatches = [];
+  logStateChange(
+    state,
+    session.username,
+    "Purge DriveWise repair data",
+    `${session.username} purged ${repairCount} repair record(s) and ${invoiceCount} invoice(s).`,
+  );
+  await writeState(state);
+  return drivewiseState(session);
+}
+
 async function downloadDrivewiseInvoiceFile(request, response) {
   const path = clean(request.query?.path);
   const requestedBucket = clean(request.query?.bucket);
@@ -744,6 +763,12 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
       const session = await requireAdmin(request, ["full", "admin", "accounting"]);
       const result = await completeDrivewiseStatement(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (request.method === "POST" && path === "/drivewise-purge-repairs") {
+      const session = await requireAdmin(request, ["full"]);
+      sendJson(response, 200, await purgeDrivewiseRepairData(session));
       return;
     }
 
