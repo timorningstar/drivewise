@@ -142,7 +142,7 @@ async function adminLogin(request) {
 }
 
 async function requireAdmin(request, allowedRoles) {
-  const token = clean((request.get("authorization") || "").replace(/^Bearer\s+/i, ""));
+  const token = clean((request.get("authorization") || "").replace(/^Bearer\s+/i, "") || request.query?.token);
   if (!token) {
     const error = new Error("Admin login required.");
     error.statusCode = 401;
@@ -410,6 +410,37 @@ async function updateDrivewiseInvoiceFile(request, session) {
   return drivewiseState(session);
 }
 
+async function downloadDrivewiseInvoiceFile(request, response) {
+  const path = clean(request.query?.path);
+  const requestedBucket = clean(request.query?.bucket);
+  const name = clean(request.query?.name) || "invoice";
+  if (!path || !path.startsWith("drivewiseInvoices/")) {
+    sendJson(response, 400, {error: "Invoice file path is required."});
+    return;
+  }
+  const bucketNames = requestedBucket ? [requestedBucket] : storageBucketNames;
+  let lastError = null;
+  for (const bucketName of bucketNames) {
+    try {
+      const file = storage.bucket(bucketName).file(path);
+      const [metadata] = await file.getMetadata();
+      const [buffer] = await file.download();
+      response
+        .status(200)
+        .set("Cache-Control", "private, max-age=0, no-store")
+        .set("Content-Type", metadata.contentType || "application/octet-stream")
+        .set("Content-Disposition", `inline; filename="${sanitizeHeaderFilename(name)}"`)
+        .send(buffer);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isMissingBucketError(error)) break;
+    }
+  }
+  logger.warn("Could not download DriveWise invoice file", {path, bucket: requestedBucket, error: lastError?.message});
+  sendJson(response, 404, {error: "Invoice file was not found."});
+}
+
 async function createDrivewisePaymentBatch(request, session) {
   const vendor = clean(request.body?.vendor);
   if (!vendor) return {ok: false, error: "Choose a vendor to create a payment batch."};
@@ -581,6 +612,10 @@ function isMissingBucketError(error) {
   return error?.code === 404 || /bucket does not exist|not found/i.test(error?.message || "");
 }
 
+function sanitizeHeaderFilename(value) {
+  return clean(value).replace(/[^\w.\- ]/g, "_") || "invoice";
+}
+
 function logStateChange(state, actor, action, details) {
   state.adminLog = Array.isArray(state.adminLog) ? state.adminLog : [];
   state.adminLog.unshift({
@@ -616,6 +651,12 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     if (request.method === "GET" && path === "/drivewise-state") {
       const session = await requireAdmin(request, ["full", "admin", "schedule", "accounting", "recovery"]);
       sendJson(response, 200, await drivewiseState(session));
+      return;
+    }
+
+    if (request.method === "GET" && path === "/drivewise-invoice-download") {
+      await requireAdmin(request, ["full", "admin", "schedule", "accounting"]);
+      await downloadDrivewiseInvoiceFile(request, response);
       return;
     }
 

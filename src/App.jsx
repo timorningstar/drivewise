@@ -301,6 +301,17 @@ function DrivewiseAdminApp() {
   )
   const vendors = [...new Set(invoices.map((invoice) => invoice.vendor).filter(Boolean))].sort()
   const vendorDatalistId = 'drivewise-vendors'
+  const invoiceFileHref = (invoice) => {
+    if (invoice.invoiceFile?.url) return invoice.invoiceFile.url
+    if (!invoice.invoiceFile?.storagePath) return ''
+    const params = new URLSearchParams({
+      token,
+      path: invoice.invoiceFile.storagePath,
+      bucket: invoice.invoiceFile.bucket || '',
+      name: invoice.invoiceFile.name || 'invoice',
+    })
+    return apiUrl(`/api/drivewise-invoice-download?${params.toString()}`)
+  }
   const filteredInvoices = invoices.filter((invoice) => {
     const vendorMatches = filters.vendor === 'all' || invoice.vendor === filters.vendor
     const statementMatches =
@@ -677,8 +688,8 @@ function DrivewiseAdminApp() {
                         {invoice.fileName || invoice.invoiceFile?.name}
                       </small>
                     )}
-                    {invoice.invoiceFile?.url && (
-                      <a className="file-link" href={invoice.invoiceFile.url} rel="noreferrer" target="_blank">
+                    {invoiceFileHref(invoice) && (
+                      <a className="file-link" href={invoiceFileHref(invoice)} rel="noreferrer" target="_blank">
                         Open saved invoice
                       </a>
                     )}
@@ -789,8 +800,8 @@ function DrivewiseAdminApp() {
                   <td>{invoice.partDescription}</td>
                   <td>{formatCurrency(invoice.cost)}</td>
                   <td>
-                    {invoice.invoiceFile?.url ? (
-                      <a href={invoice.invoiceFile.url} rel="noreferrer" target="_blank">
+                    {invoiceFileHref(invoice) ? (
+                      <a href={invoiceFileHref(invoice)} rel="noreferrer" target="_blank">
                         Invoice
                       </a>
                     ) : (
