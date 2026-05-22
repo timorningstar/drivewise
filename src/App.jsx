@@ -26,7 +26,7 @@ function DrivewiseAdminApp() {
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
   const [activeView, setActiveView] = useState('entry')
-  const [filters, setFilters] = useState({ vendor: 'all', statement: 'all' })
+  const [filters, setFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [repairView, setRepairView] = useState('vehicle')
   const [accountForm, setAccountForm] = useState({ username: '', password: '' })
   const [regularForm, setRegularForm] = useState({
@@ -337,14 +337,15 @@ function DrivewiseAdminApp() {
     return apiUrl(`/api/drivewise-invoice-download?${params.toString()}`)
   }
   const openInvoices = invoices.filter((invoice) => !invoice.statementComplete)
-  const filteredInvoices = openInvoices.filter((invoice) => {
+  const filteredInvoices = invoices.filter((invoice) => {
     const vendorMatches = filters.vendor === 'all' || invoice.vendor === filters.vendor
     const statementMatches =
       filters.statement === 'all' ||
-      (filters.statement === 'unchecked' && !invoice.statementChecked) ||
-      (filters.statement === 'checked' && invoice.statementChecked)
+      (filters.statement === 'unchecked' && !invoice.statementComplete && !invoice.statementChecked) ||
+      (filters.statement === 'checked' && invoice.statementComplete)
     return vendorMatches && statementMatches
   }).sort((a, b) =>
+    Number(a.statementComplete) - Number(b.statementComplete) ||
     Number(a.statementChecked) - Number(b.statementChecked) ||
     a.vendor.localeCompare(b.vendor) ||
     a.invoiceNumber.localeCompare(b.invoiceNumber),
@@ -846,8 +847,8 @@ function DrivewiseAdminApp() {
                   </td>
                   <td className="no-print">
                     <input
-                      checked={invoice.statementChecked}
-                      disabled={!canManageDrivewiseAccounting}
+                      checked={invoice.statementChecked || invoice.statementComplete}
+                      disabled={!canManageDrivewiseAccounting || invoice.statementComplete}
                       onChange={(event) =>
                         toggleInvoiceStatus(invoice.repair.id, invoice, { statementChecked: event.target.checked })
                       }
