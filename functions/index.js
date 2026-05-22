@@ -207,6 +207,12 @@ async function drivewiseState(session) {
 async function enrichDrivewiseRepairs(repairs) {
   return Promise.all((repairs || []).map(async (repair) => ({
     ...repair,
+    notesFile: repair.notesFile?.storagePath
+      ? {
+        ...repair.notesFile,
+        url: await signedStorageUrl(repair.notesFile.storagePath, repair.notesFile.bucket),
+      }
+      : repair.notesFile || null,
     invoices: await Promise.all((repair.invoices || []).map(async (invoice) => ({
       ...invoice,
       invoiceFile: invoice.invoiceFile?.storagePath
@@ -303,6 +309,7 @@ async function saveDrivewiseRepair(request, session) {
   }
 
   try {
+    repair.notesFile = await saveDrivewiseNotesFile(repair.id, repair);
     repair.invoices = await saveDrivewiseInvoiceFiles(repair.id, repair.invoices);
   } catch (error) {
     return {ok: false, error: error.message};
@@ -556,6 +563,15 @@ function sanitizeDrivewiseRepair(input) {
     neededRepairs: clean(input.neededRepairs),
     status: clean(input.status) || "Open",
     notes: clean(input.notes),
+    notesFileName: clean(input.notesFileName),
+    notesFileContentType: clean(input.notesFileContentType),
+    notesFileData: clean(input.notesFileData),
+    notesFile: input.notesFile && typeof input.notesFile === "object" ? {
+      name: clean(input.notesFile.name),
+      contentType: clean(input.notesFile.contentType),
+      storagePath: clean(input.notesFile.storagePath),
+      bucket: clean(input.notesFile.bucket),
+    } : null,
     invoices: invoices.map((invoice) => ({
       id: clean(invoice.id) || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       vendor: clean(invoice.vendor),
@@ -579,6 +595,38 @@ function sanitizeDrivewiseRepair(input) {
       statementCompletedAt: clean(invoice.statementCompletedAt),
       statementCompletedBy: clean(invoice.statementCompletedBy),
     })),
+  };
+}
+
+async function saveDrivewiseNotesFile(repairId, repair) {
+  if (!repair.notesFileData) {
+    delete repair.notesFileData;
+    delete repair.notesFileContentType;
+    delete repair.notesFileName;
+    return repair.notesFile || null;
+  }
+  if (!["image/jpeg", "image/png", "application/pdf"].includes(repair.notesFileContentType)) {
+    throw new Error("Notes files need to be JPG, PNG, or PDF.");
+  }
+  const buffer = Buffer.from(repair.notesFileData, "base64");
+  if (!buffer.length || buffer.length > 10 * 1024 * 1024) {
+    throw new Error("Notes files must be smaller than 10 MB.");
+  }
+  const fileName = repair.notesFileName || "Notes attachment";
+  const contentType = repair.notesFileContentType;
+  const extension = repair.notesFileContentType === "application/pdf"
+    ? "pdf"
+    : repair.notesFileContentType === "image/png" ? "png" : "jpg";
+  const storagePath = `drivewiseInvoices/${repairId}/notes-attachment.${extension}`;
+  const bucketName = await saveInvoiceBufferToStorage(storagePath, buffer, contentType);
+  delete repair.notesFileData;
+  delete repair.notesFileContentType;
+  delete repair.notesFileName;
+  return {
+    name: fileName,
+    contentType,
+    storagePath,
+    bucket: bucketName,
   };
 }
 

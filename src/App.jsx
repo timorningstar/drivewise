@@ -242,6 +242,26 @@ function DrivewiseAdminApp() {
     })
   }
 
+  const handleNotesFile = async (file) => {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      setError('Notes files need to be JPG, PNG, or PDF.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Notes files must be smaller than 10 MB.')
+      return
+    }
+    const dataUrl = await readFileAsDataUrl(file)
+    setRepairForm((current) => ({
+      ...current,
+      notesFileName: file.name,
+      notesFileContentType: file.type,
+      notesFileData: dataUrl.split(',')[1],
+      notesFilePreviewUrl: dataUrl,
+    }))
+  }
+
   const handleDashboardInvoiceFile = async (invoice, file) => {
     if (!file) return
     if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
@@ -347,6 +367,25 @@ function DrivewiseAdminApp() {
   const invoicePreview = (invoice) => {
     const href = invoice.filePreviewUrl || invoiceFileHref(invoice)
     const contentType = invoice.fileContentType || invoice.invoiceFile?.contentType || ''
+    if (!href) return null
+    if (contentType.startsWith('image/')) return { href, type: 'image' }
+    if (contentType === 'application/pdf') return { href, type: 'pdf' }
+    return null
+  }
+  const notesFileHref = (repair) => {
+    if (repair.notesFile?.url) return repair.notesFile.url
+    if (!repair.notesFile?.storagePath) return ''
+    const params = new URLSearchParams({
+      token,
+      path: repair.notesFile.storagePath,
+      bucket: repair.notesFile.bucket || '',
+      name: repair.notesFile.name || 'notes-attachment',
+    })
+    return apiUrl(`/api/drivewise-invoice-download?${params.toString()}`)
+  }
+  const notesPreview = (repair) => {
+    const href = repair.notesFilePreviewUrl || notesFileHref(repair)
+    const contentType = repair.notesFileContentType || repair.notesFile?.contentType || ''
     if (!href) return null
     if (contentType.startsWith('image/')) return { href, type: 'image' }
     if (contentType === 'application/pdf') return { href, type: 'pdf' }
@@ -661,6 +700,45 @@ function DrivewiseAdminApp() {
               value={repairForm.notes}
             />
           </label>
+          <label className="camera-upload-label notes-upload-label">
+            Notes image or PDF
+            <input
+              accept="image/jpeg,image/png,application/pdf"
+              capture="environment"
+              className="camera-upload-input"
+              onChange={(event) => handleNotesFile(event.target.files?.[0])}
+              type="file"
+            />
+            <span className="camera-upload-button">
+              {repairForm.notesFileName || repairForm.notesFile?.name
+                ? 'Replace notes file'
+                : 'Take photo or upload notes file'}
+            </span>
+            {(repairForm.notesFileName || repairForm.notesFile?.name) && (
+              <small className="selected-file-name">
+                {repairForm.notesFileName || repairForm.notesFile?.name}
+              </small>
+            )}
+            {notesFileHref(repairForm) && (
+              <a className="file-link" href={notesFileHref(repairForm)} rel="noreferrer" target="_blank">
+                Open saved notes file
+              </a>
+            )}
+          </label>
+          {notesPreview(repairForm)?.type === 'image' && (
+            <img
+              alt="Notes attachment preview"
+              className="receipt-preview"
+              src={notesPreview(repairForm).href}
+            />
+          )}
+          {notesPreview(repairForm)?.type === 'pdf' && (
+            <iframe
+              className="invoice-pdf-preview"
+              src={notesPreview(repairForm).href}
+              title="Notes PDF preview"
+            />
+          )}
 
           <div className="date-editor-header">
             <strong>Parts and invoices</strong>
@@ -957,6 +1035,11 @@ function emptyDrivewiseRepair() {
     neededRepairs: '',
     status: 'Open',
     notes: '',
+    notesFileName: '',
+    notesFileContentType: '',
+    notesFileData: '',
+    notesFilePreviewUrl: '',
+    notesFile: null,
     invoices: [emptyDrivewiseInvoice()],
   }
 }
