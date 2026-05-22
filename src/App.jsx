@@ -135,6 +135,30 @@ function DrivewiseAdminApp() {
     }
   }
 
+  const completeStatementInvoices = async () => {
+    if (!statementInvoices.length) return
+    setError('')
+    setMessage('')
+    try {
+      const response = await fetch(apiUrl(`/api/drivewise-complete-statement?app=${DRIVEWISE_APP_ID}`), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          invoices: statementInvoices.map((invoice) => ({
+            repairId: invoice.repair.id,
+            invoiceId: invoice.id,
+          })),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Statement invoices could not be completed.')
+      setData(payload)
+      setMessage('Statement invoices marked complete.')
+    } catch (completeError) {
+      setError(completeError.message)
+    }
+  }
+
   const saveMainAccount = async (event) => {
     event.preventDefault()
     setError('')
@@ -312,7 +336,8 @@ function DrivewiseAdminApp() {
     })
     return apiUrl(`/api/drivewise-invoice-download?${params.toString()}`)
   }
-  const filteredInvoices = invoices.filter((invoice) => {
+  const openInvoices = invoices.filter((invoice) => !invoice.statementComplete)
+  const filteredInvoices = openInvoices.filter((invoice) => {
     const vendorMatches = filters.vendor === 'all' || invoice.vendor === filters.vendor
     const statementMatches =
       filters.statement === 'all' ||
@@ -324,7 +349,7 @@ function DrivewiseAdminApp() {
     a.vendor.localeCompare(b.vendor) ||
     a.invoiceNumber.localeCompare(b.invoiceNumber),
   )
-  const statementInvoices = invoices
+  const statementInvoices = openInvoices
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
   const groupedRepairs = groupRepairs(repairs, repairView)
@@ -756,6 +781,9 @@ function DrivewiseAdminApp() {
                 </div>
                 <button className="secondary-action" onClick={() => window.print()} type="button">
                   Print statement list
+                </button>
+                <button className="secondary-action" onClick={completeStatementInvoices} type="button">
+                  Mark complete
                 </button>
               </div>
               <table className="schedule-table">

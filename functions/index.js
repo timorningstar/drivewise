@@ -410,6 +410,34 @@ async function updateDrivewiseInvoiceFile(request, session) {
   return drivewiseState(session);
 }
 
+async function completeDrivewiseStatement(request, session) {
+  const selectedInvoices = Array.isArray(request.body?.invoices) ? request.body.invoices : [];
+  const selectedKeys = new Set(selectedInvoices.map((invoice) => `${clean(invoice.repairId)}:${clean(invoice.invoiceId)}`));
+  if (!selectedKeys.size) return {ok: false, error: "Choose at least one invoice to complete."};
+
+  const completedAt = new Date().toISOString();
+  const state = await readState();
+  let completedCount = 0;
+  state.repairs = (state.repairs || []).map((repair) => ({
+    ...repair,
+    invoices: (repair.invoices || []).map((invoice) => {
+      if (!selectedKeys.has(`${repair.id}:${invoice.id}`)) return invoice;
+      completedCount += 1;
+      return {
+        ...invoice,
+        statementChecked: false,
+        statementComplete: true,
+        statementCompletedAt: completedAt,
+        statementCompletedBy: session.username,
+      };
+    }),
+  }));
+  if (!completedCount) return {ok: false, error: "No matching invoices were found."};
+  logStateChange(state, session.username, "Complete DriveWise statement", `${session.username} completed ${completedCount} invoice(s) from a vendor statement.`);
+  await writeState(state);
+  return drivewiseState(session);
+}
+
 async function downloadDrivewiseInvoiceFile(request, response) {
   const path = clean(request.query?.path);
   const requestedBucket = clean(request.query?.bucket);
@@ -528,6 +556,9 @@ function sanitizeDrivewiseRepair(input) {
       paid: Boolean(invoice.paid),
       paidAt: clean(invoice.paidAt),
       paymentBatchId: clean(invoice.paymentBatchId),
+      statementComplete: Boolean(invoice.statementComplete),
+      statementCompletedAt: clean(invoice.statementCompletedAt),
+      statementCompletedBy: clean(invoice.statementCompletedBy),
     })),
   };
 }
@@ -705,6 +736,13 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     if (request.method === "POST" && path === "/drivewise-invoice-file") {
       const session = await requireAdmin(request, ["full", "admin", "accounting", "schedule"]);
       const result = await updateDrivewiseInvoiceFile(request, session);
+      sendJson(response, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (request.method === "POST" && path === "/drivewise-complete-statement") {
+      const session = await requireAdmin(request, ["full", "admin", "accounting"]);
+      const result = await completeDrivewiseStatement(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }
