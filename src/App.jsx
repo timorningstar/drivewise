@@ -218,6 +218,40 @@ function DrivewiseAdminApp() {
     })
   }
 
+  const handleDashboardInvoiceFile = async (invoice, file) => {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      setError('Invoice files need to be JPG, PNG, or PDF.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Invoice files must be smaller than 10 MB.')
+      return
+    }
+    setError('')
+    setMessage('')
+    const dataUrl = await readFileAsDataUrl(file)
+    try {
+      const response = await fetch(apiUrl(`/api/drivewise-invoice-file?app=${DRIVEWISE_APP_ID}`), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          repairId: invoice.repair.id,
+          invoiceId: invoice.id,
+          fileName: file.name,
+          fileContentType: file.type,
+          fileData: dataUrl.split(',')[1],
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Invoice file could not be saved.')
+      setData(payload)
+      setMessage('Invoice file saved.')
+    } catch (fileError) {
+      setError(fileError.message)
+    }
+  }
+
   const addInvoice = () => {
     setRepairForm((current) => ({
       ...current,
@@ -759,7 +793,17 @@ function DrivewiseAdminApp() {
                       <a href={invoice.invoiceFile.url} rel="noreferrer" target="_blank">
                         Invoice
                       </a>
-                    ) : 'Missing'}
+                    ) : (
+                      <label className="inline-upload-label">
+                        Missing
+                        <input
+                          accept="image/jpeg,image/png,application/pdf"
+                          className="camera-upload-input"
+                          onChange={(event) => handleDashboardInvoiceFile(invoice, event.target.files?.[0])}
+                          type="file"
+                        />
+                      </label>
+                    )}
                   </td>
                   <td className="no-print">
                     <input

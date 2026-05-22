@@ -405,6 +405,13 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.inline-upload-label {
+  color: #8c4f27;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+}
+
 .receipt-preview {
   border: 1px solid #d7dee6;
   border-radius: 8px;

@@ -371,6 +371,45 @@ async function updateDrivewiseInvoiceStatus(request, session) {
   return drivewiseState(session);
 }
 
+async function updateDrivewiseInvoiceFile(request, session) {
+  const repairId = clean(request.body?.repairId);
+  const invoiceId = clean(request.body?.invoiceId);
+  const fileName = clean(request.body?.fileName);
+  const fileContentType = clean(request.body?.fileContentType);
+  const fileData = clean(request.body?.fileData);
+  if (!repairId || !invoiceId || !fileName || !fileContentType || !fileData) {
+    return {ok: false, error: "Choose an invoice file to upload."};
+  }
+
+  const state = await readState();
+  let changed = false;
+  try {
+    state.repairs = await Promise.all((state.repairs || []).map(async (repair) => {
+      if (repair.id !== repairId) return repair;
+      return {
+        ...repair,
+        invoices: await Promise.all((repair.invoices || []).map(async (invoice) => {
+          if (invoice.id !== invoiceId) return invoice;
+          changed = true;
+          const [storedInvoice] = await saveDrivewiseInvoiceFiles(repairId, [{
+            ...invoice,
+            fileName,
+            fileContentType,
+            fileData,
+          }]);
+          return storedInvoice;
+        })),
+      };
+    }));
+  } catch (error) {
+    return {ok: false, error: error.message};
+  }
+  if (!changed) return {ok: false, error: "Invoice was not found."};
+  logStateChange(state, session.username, "Upload DriveWise invoice file", `${session.username} uploaded an invoice file.`);
+  await writeState(state);
+  return drivewiseState(session);
+}
+
 async function createDrivewisePaymentBatch(request, session) {
   const vendor = clean(request.body?.vendor);
   if (!vendor) return {ok: false, error: "Choose a vendor to create a payment batch."};
@@ -618,6 +657,13 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     if (request.method === "POST" && path === "/drivewise-invoice-status") {
       const session = await requireAdmin(request, ["full", "admin", "accounting"]);
       const result = await updateDrivewiseInvoiceStatus(request, session);
+      sendJson(response, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (request.method === "POST" && path === "/drivewise-invoice-file") {
+      const session = await requireAdmin(request, ["full", "admin", "accounting", "schedule"]);
+      const result = await updateDrivewiseInvoiceFile(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }
