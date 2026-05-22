@@ -307,6 +307,10 @@ async function saveDrivewiseRepair(request, session) {
   if (!(repair.invoices || []).length || repair.invoices.some((invoice) => !invoice.invoiceFile && !invoice.fileData)) {
     return {ok: false, error: "Upload an invoice image or PDF for each invoice."};
   }
+  const existingIndex = (state.repairs || []).findIndex((item) => item.id === repair.id);
+  if (existingIndex >= 0 && repairHasCompletedStatement(state.repairs[existingIndex])) {
+    return {ok: false, error: "This repair record has completed statement invoices and is view-only."};
+  }
 
   try {
     repair.notesFile = await saveDrivewiseNotesFile(repair.id, repair);
@@ -315,7 +319,6 @@ async function saveDrivewiseRepair(request, session) {
     return {ok: false, error: error.message};
   }
 
-  const existingIndex = (state.repairs || []).findIndex((item) => item.id === repair.id);
   if (existingIndex >= 0) {
     state.repairs[existingIndex] = {
       ...state.repairs[existingIndex],
@@ -344,6 +347,9 @@ async function deleteDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = (state.repairs || []).find((item) => item.id === repairId);
   if (!repair) return {ok: false, error: "Repair record was not found."};
+  if (repairHasCompletedStatement(repair)) {
+    return {ok: false, error: "This repair record has completed statement invoices and cannot be deleted."};
+  }
   state.repairs = state.repairs.filter((item) => item.id !== repairId);
   logStateChange(state, session.username, "Delete DriveWise repair", `${session.username} deleted repair record for ${repair.ownerName}.`);
   await writeState(state);
@@ -596,6 +602,10 @@ function sanitizeDrivewiseRepair(input) {
       statementCompletedBy: clean(invoice.statementCompletedBy),
     })),
   };
+}
+
+function repairHasCompletedStatement(repair) {
+  return (repair.invoices || []).some((invoice) => invoice.statementComplete);
 }
 
 async function saveDrivewiseNotesFile(repairId, repair) {

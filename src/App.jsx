@@ -20,6 +20,10 @@ function formatCurrency(value) {
   }).format(value || 0)
 }
 
+function repairHasCompletedStatement(repair) {
+  return (repair.invoices || []).some((invoice) => invoice.statementComplete)
+}
+
 function DrivewiseAdminApp() {
   const [token, setToken] = useState('')
   const [login, setLogin] = useState({ username: '', password: '' })
@@ -320,6 +324,19 @@ function DrivewiseAdminApp() {
   }
 
   const editRepair = (repair) => {
+    if (repairHasCompletedStatement(repair)) {
+      viewRepair(repair)
+      return
+    }
+    setRepairForm({
+      ...repair,
+      invoices: repair.invoices?.length ? repair.invoices : [emptyDrivewiseInvoice()],
+    })
+    setActiveView('entry')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const viewRepair = (repair) => {
     setRepairForm({
       ...repair,
       invoices: repair.invoices?.length ? repair.invoices : [emptyDrivewiseInvoice()],
@@ -348,6 +365,7 @@ function DrivewiseAdminApp() {
   const canManageMainAccount = ['full', 'recovery'].includes(data?.role)
   const canManageRegularAdmins = data?.role === 'full'
   const canViewDrivewiseRecords = data?.role !== 'recovery'
+  const isRepairFormReadOnly = repairForm.id && repairHasCompletedStatement(repairForm)
   const invoices = repairs.flatMap((repair) =>
     (repair.invoices || []).map((invoice) => ({ ...invoice, repair })),
   )
@@ -598,18 +616,25 @@ function DrivewiseAdminApp() {
         {data.role === 'recovery' && canManageMainAccount && adminAccountPanel}
 
         {canManageDrivewiseRepairs && activeView === 'entry' && (
-        <form className="panel admin-editor" onSubmit={saveRepair}>
+        <form
+          className="panel admin-editor"
+          onSubmit={isRepairFormReadOnly ? (event) => event.preventDefault() : saveRepair}
+        >
           <div className="section-heading admin-heading-row">
             <div>
               <p className="eyebrow">Face sheet</p>
-              <h2>{repairForm.id ? 'Edit Repair Record' : 'New Repair Record'}</h2>
+              <h2>
+                {isRepairFormReadOnly
+                  ? 'View Repair Record'
+                  : repairForm.id ? 'Edit Repair Record' : 'New Repair Record'}
+              </h2>
             </div>
             <button
               className="secondary-action"
-              onClick={() => setRepairForm(emptyDrivewiseRepair())}
+              onClick={startNewRepair}
               type="button"
             >
-              Clear form
+              {isRepairFormReadOnly ? 'New repair record' : 'Clear form'}
             </button>
           </div>
 
@@ -620,6 +645,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, repairDate: event.target.value }))
                 }
+                disabled={isRepairFormReadOnly}
                 required
                 type="date"
                 value={repairForm.repairDate}
@@ -631,6 +657,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, ownerName: event.target.value }))
                 }
+                disabled={isRepairFormReadOnly}
                 required
                 value={repairForm.ownerName}
               />
@@ -641,6 +668,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, payer: event.target.value }))
                 }
+                disabled={isRepairFormReadOnly}
                 value={repairForm.payer}
               />
             </label>
@@ -650,6 +678,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, year: event.target.value }))
                 }
+                disabled={isRepairFormReadOnly}
                 placeholder="2020"
                 required
                 value={repairForm.year}
@@ -661,6 +690,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, make: event.target.value }))
                 }
+                disabled={isRepairFormReadOnly}
                 placeholder="Toyota"
                 required
                 value={repairForm.make}
@@ -672,6 +702,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, model: event.target.value }))
                 }
+                disabled={isRepairFormReadOnly}
                 placeholder="Sienna"
                 required
                 value={repairForm.model}
@@ -685,6 +716,7 @@ function DrivewiseAdminApp() {
               onChange={(event) =>
                 setRepairForm((current) => ({ ...current, neededRepairs: event.target.value }))
               }
+              disabled={isRepairFormReadOnly}
               required
               rows="3"
               value={repairForm.neededRepairs}
@@ -696,6 +728,7 @@ function DrivewiseAdminApp() {
               onChange={(event) =>
                 setRepairForm((current) => ({ ...current, notes: event.target.value }))
               }
+              disabled={isRepairFormReadOnly}
               rows="3"
               value={repairForm.notes}
             />
@@ -706,6 +739,7 @@ function DrivewiseAdminApp() {
               accept="image/jpeg,image/png,application/pdf"
               capture="environment"
               className="camera-upload-input"
+              disabled={isRepairFormReadOnly}
               onChange={(event) => handleNotesFile(event.target.files?.[0])}
               type="file"
             />
@@ -751,14 +785,17 @@ function DrivewiseAdminApp() {
               <div className="drivewise-invoice-card" key={invoice.id}>
                 <div className="receipt-card-header">
                   <strong>Invoice {index + 1}</strong>
-                  <button className="text-action" onClick={() => removeInvoice(index)} type="button">
-                    Remove
-                  </button>
+                  {!isRepairFormReadOnly && (
+                    <button className="text-action" onClick={() => removeInvoice(index)} type="button">
+                      Remove
+                    </button>
+                  )}
                 </div>
                 <div className="field-grid">
                   <label>
                     Vendor
                     <input
+                      disabled={isRepairFormReadOnly}
                       list={vendorDatalistId}
                       onChange={(event) => updateInvoice(index, { vendor: event.target.value })}
                       value={invoice.vendor}
@@ -767,6 +804,7 @@ function DrivewiseAdminApp() {
                   <label>
                     Invoice #
                     <input
+                      disabled={isRepairFormReadOnly}
                       onChange={(event) => updateInvoice(index, { invoiceNumber: event.target.value })}
                       value={invoice.invoiceNumber}
                     />
@@ -774,6 +812,7 @@ function DrivewiseAdminApp() {
                   <label>
                     Part description
                     <input
+                      disabled={isRepairFormReadOnly}
                       onChange={(event) => updateInvoice(index, { partDescription: event.target.value })}
                       value={invoice.partDescription}
                     />
@@ -781,6 +820,7 @@ function DrivewiseAdminApp() {
                   <label>
                     Cost
                     <input
+                      disabled={isRepairFormReadOnly}
                       onChange={(event) => updateInvoice(index, { cost: event.target.value })}
                       step="0.01"
                       type="number"
@@ -793,6 +833,7 @@ function DrivewiseAdminApp() {
                       accept="image/jpeg,image/png,application/pdf"
                       capture="environment"
                       className="camera-upload-input"
+                      disabled={isRepairFormReadOnly}
                       onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
                       required={!invoice.invoiceFile && !invoice.fileData}
                       type="file"
@@ -831,12 +872,14 @@ function DrivewiseAdminApp() {
               </div>
             ))}
           </div>
-          <div className="form-action-row">
-            <button className="secondary-action" onClick={addInvoice} type="button">
-              Add another invoice
-            </button>
-            <button className="primary-action admin-save" type="submit">Save repair record</button>
-          </div>
+          {!isRepairFormReadOnly && (
+            <div className="form-action-row">
+              <button className="secondary-action" onClick={addInvoice} type="button">
+                Add another invoice
+              </button>
+              <button className="primary-action admin-save" type="submit">Save repair record</button>
+            </div>
+          )}
         </form>
         )}
 
@@ -1007,11 +1050,16 @@ function DrivewiseAdminApp() {
                       <strong>{repair.ownerName}</strong><br />
                       {vehicleLabel(repair)}
                       {repair.payer ? ` - Payer: ${repair.payer}` : ''}
+                      {repairHasCompletedStatement(repair) ? ' - Statement complete' : ''}
                     </span>
                     {canManageDrivewiseRepairs && (
                     <div>
-                      <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
-                      {data.role === 'full' && (
+                      {repairHasCompletedStatement(repair) ? (
+                        <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>
+                      ) : (
+                        <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
+                      )}
+                      {data.role === 'full' && !repairHasCompletedStatement(repair) && (
                         <button className="text-action" onClick={() => deleteRepair(repair.id)} type="button">Delete</button>
                       )}
                     </div>
