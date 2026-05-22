@@ -687,7 +687,6 @@ function DrivewiseAdminApp() {
                   <label>
                     Cost
                     <input
-                      min="0"
                       onChange={(event) => updateInvoice(index, { cost: event.target.value })}
                       step="0.01"
                       type="number"

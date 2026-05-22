@@ -561,7 +561,7 @@ function sanitizeDrivewiseRepair(input) {
       vendor: clean(invoice.vendor),
       invoiceNumber: clean(invoice.invoiceNumber),
       partDescription: clean(invoice.partDescription),
-      cost: Math.max(0, Number.parseFloat(invoice.cost) || 0),
+      cost: Number.parseFloat(invoice.cost) || 0,
       fileName: clean(invoice.fileName),
       fileContentType: clean(invoice.fileContentType),
       fileData: clean(invoice.fileData),
