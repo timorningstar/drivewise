@@ -25,7 +25,9 @@ function DrivewiseAdminApp() {
   const [login, setLogin] = useState({ username: '', password: '' })
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
-  const [filters, setFilters] = useState({ vendor: 'all', status: 'all' })
+  const [activeView, setActiveView] = useState('entry')
+  const [filters, setFilters] = useState({ vendor: 'all', statement: 'all' })
+  const [repairView, setRepairView] = useState('vehicle')
   const [accountForm, setAccountForm] = useState({ username: '', password: '' })
   const [regularForm, setRegularForm] = useState({
     username: '',
@@ -52,6 +54,8 @@ function DrivewiseAdminApp() {
     }
     setData(payload)
     setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
+    if (payload.role === 'accounting') setActiveView('invoices')
+    if (payload.role === 'recovery') setActiveView('entry')
     setError('')
   }
 
@@ -90,6 +94,7 @@ function DrivewiseAdminApp() {
       setData(payload)
       setRepairForm(emptyDrivewiseRepair())
       setMessage('DriveWise repair record saved.')
+      setActiveView('entry')
     } catch (saveError) {
       setError(saveError.message)
     }
@@ -127,24 +132,6 @@ function DrivewiseAdminApp() {
       setData(payload)
     } catch (statusError) {
       setError(statusError.message)
-    }
-  }
-
-  const createPaymentBatch = async (vendor) => {
-    setError('')
-    setMessage('')
-    try {
-      const response = await fetch(apiUrl(`/api/drivewise-payment-batch?app=${DRIVEWISE_APP_ID}`), {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ vendor }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Payment batch could not be created.')
-      setData(payload)
-      setMessage(`Marked unpaid ${vendor} invoices as paid.`)
-    } catch (batchError) {
-      setError(batchError.message)
     }
   }
 
@@ -259,6 +246,7 @@ function DrivewiseAdminApp() {
       ...repair,
       invoices: repair.invoices?.length ? repair.invoices : [emptyDrivewiseInvoice()],
     })
+    setActiveView('entry')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -281,13 +269,20 @@ function DrivewiseAdminApp() {
   const vendorDatalistId = 'drivewise-vendors'
   const filteredInvoices = invoices.filter((invoice) => {
     const vendorMatches = filters.vendor === 'all' || invoice.vendor === filters.vendor
-    const statusMatches =
-      filters.status === 'all' ||
-      (filters.status === 'unpaid' && !invoice.paid) ||
-      (filters.status === 'paid' && invoice.paid) ||
-      (filters.status === 'unchecked' && !invoice.statementChecked)
-    return vendorMatches && statusMatches
-  })
+    const statementMatches =
+      filters.statement === 'all' ||
+      (filters.statement === 'unchecked' && !invoice.statementChecked) ||
+      (filters.statement === 'checked' && invoice.statementChecked)
+    return vendorMatches && statementMatches
+  }).sort((a, b) =>
+    Number(a.statementChecked) - Number(b.statementChecked) ||
+    a.vendor.localeCompare(b.vendor) ||
+    a.invoiceNumber.localeCompare(b.invoiceNumber),
+  )
+  const statementInvoices = invoices
+    .filter((invoice) => invoice.statementChecked)
+    .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
+  const groupedRepairs = groupRepairs(repairs, repairView)
   const adminAccountPanel = (
     <section className="panel admin-account-panel">
       <div className="section-heading">
@@ -395,7 +390,7 @@ function DrivewiseAdminApp() {
             <h1>Invoice Admin</h1>
             <p className="intro">
               Track vehicles, repairs, vendors, invoice numbers, costs,
-              statement checks, and payment status.
+              statement checks, and invoice files.
             </p>
           </div>
         </header>
@@ -440,18 +435,43 @@ function DrivewiseAdminApp() {
           <p className="intro">
             Signed in as {data.username}. {data.role === 'recovery'
               ? 'Recover the full-admin account without opening DriveWise records.'
-              : 'Manage repair face sheets, invoice tracking, vendor statement checks, and payment batches.'}
+              : 'Manage repair face sheets, invoice tracking, vendor statement checks, and invoice files.'}
           </p>
           <div className="header-actions">
             <button className="secondary-action" onClick={logout} type="button">Log out</button>
           </div>
+          {canViewDrivewiseRecords && (
+            <nav className="top-menu">
+              <button
+                className={activeView === 'entry' ? 'active' : ''}
+                onClick={() => setActiveView('entry')}
+                type="button"
+              >
+                New Repair Record
+              </button>
+              <button
+                className={activeView === 'repairs' ? 'active' : ''}
+                onClick={() => setActiveView('repairs')}
+                type="button"
+              >
+                Vehicle Repair Records
+              </button>
+              <button
+                className={activeView === 'invoices' ? 'active' : ''}
+                onClick={() => setActiveView('invoices')}
+                type="button"
+              >
+                Vendor Invoice View
+              </button>
+            </nav>
+          )}
         </div>
       </header>
 
       <section className="admin-shell drivewise-shell">
         {data.role === 'recovery' && canManageMainAccount && adminAccountPanel}
 
-        {canManageDrivewiseRepairs && (
+        {canManageDrivewiseRepairs && activeView === 'entry' && (
         <form className="panel admin-editor" onSubmit={saveRepair}>
           <div className="section-heading admin-heading-row">
             <div>
@@ -480,20 +500,6 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Status
-              <select
-                onChange={(event) =>
-                  setRepairForm((current) => ({ ...current, status: event.target.value }))
-                }
-                value={repairForm.status}
-              >
-                <option>Open</option>
-                <option>Waiting on parts</option>
-                <option>Ready for accounting</option>
-                <option>Closed</option>
-              </select>
-            </label>
-            <label>
               Owner name
               <input
                 onChange={(event) =>
@@ -501,6 +507,15 @@ function DrivewiseAdminApp() {
                 }
                 required
                 value={repairForm.ownerName}
+              />
+            </label>
+            <label>
+              Payer
+              <input
+                onChange={(event) =>
+                  setRepairForm((current) => ({ ...current, payer: event.target.value }))
+                }
+                value={repairForm.payer}
               />
             </label>
             <label>
@@ -536,15 +551,6 @@ function DrivewiseAdminApp() {
                 value={repairForm.model}
               />
             </label>
-            <label>
-              Payer
-              <input
-                onChange={(event) =>
-                  setRepairForm((current) => ({ ...current, payer: event.target.value }))
-                }
-                value={repairForm.payer}
-              />
-            </label>
           </div>
 
           <label>
@@ -571,9 +577,6 @@ function DrivewiseAdminApp() {
 
           <div className="date-editor-header">
             <strong>Parts and invoices</strong>
-            <button className="secondary-action" onClick={addInvoice} type="button">
-              Add invoice
-            </button>
           </div>
           <div className="drivewise-invoice-editor">
             <datalist id={vendorDatalistId}>
@@ -657,18 +660,22 @@ function DrivewiseAdminApp() {
               </div>
             ))}
           </div>
-          <button className="primary-action admin-save" type="submit">Save repair record</button>
+          <div className="form-action-row">
+            <button className="secondary-action" onClick={addInvoice} type="button">
+              Add another invoice
+            </button>
+            <button className="primary-action admin-save" type="submit">Save repair record</button>
+          </div>
         </form>
         )}
 
-        {canViewDrivewiseRecords && (
+        {canViewDrivewiseRecords && activeView === 'invoices' && (
         <section className="panel printable-schedule">
           <div className="section-heading admin-heading-row no-print">
             <div>
               <p className="eyebrow">Invoices</p>
               <h2>Vendor Statement and Payment View</h2>
             </div>
-            <button className="secondary-action" onClick={() => window.print()} type="button">Print</button>
           </div>
 
           <div className="schedule-filters no-print">
@@ -683,30 +690,51 @@ function DrivewiseAdminApp() {
               </select>
             </label>
             <label>
-              Status
+              Statement
               <select
-                onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
-                value={filters.status}
+                onChange={(event) => setFilters((current) => ({ ...current, statement: event.target.value }))}
+                value={filters.statement}
               >
                 <option value="all">All invoices</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="paid">Paid</option>
-                <option value="unchecked">Not checked to statement</option>
+                <option value="unchecked">Unchecked</option>
+                <option value="checked">Statement checked</option>
               </select>
             </label>
           </div>
 
-          {canManageDrivewiseAccounting && filters.vendor !== 'all' && (
-            <button
-              className="secondary-action no-print"
-              onClick={() => createPaymentBatch(filters.vendor)}
-              type="button"
-            >
-              Mark unpaid {filters.vendor} invoices paid
-            </button>
+          {statementInvoices.length > 0 && (
+            <section className="statement-print-list">
+              <div className="section-heading admin-heading-row no-print">
+                <div>
+                  <p className="eyebrow">Statement List</p>
+                  <h2>Invoices Selected for Payment</h2>
+                </div>
+                <button className="secondary-action" onClick={() => window.print()} type="button">
+                  Print statement list
+                </button>
+              </div>
+              <table className="schedule-table">
+                <thead>
+                  <tr>
+                    <th>Vendor</th>
+                    <th>Invoice #</th>
+                    <th>Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {statementInvoices.map((invoice) => (
+                    <tr key={`statement-${invoice.repair.id}-${invoice.id}`}>
+                      <td>{invoice.vendor}</td>
+                      <td>{invoice.invoiceNumber}</td>
+                      <td>{formatCurrency(invoice.cost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
           )}
 
-          <table className="schedule-table drivewise-table">
+          <table className="schedule-table drivewise-table no-print">
             <thead>
               <tr>
                 <th>Vendor</th>
@@ -714,9 +742,8 @@ function DrivewiseAdminApp() {
                 <th>Owner / Vehicle</th>
                 <th>Part</th>
                 <th>Cost</th>
-                <th>File</th>
-                <th className="no-print">Checked</th>
-                <th className="no-print">Paid</th>
+                <th>Invoice</th>
+                <th className="no-print">Statement</th>
               </tr>
             </thead>
             <tbody>
@@ -744,16 +771,6 @@ function DrivewiseAdminApp() {
                       type="checkbox"
                     />
                   </td>
-                  <td className="no-print">
-                    <input
-                      checked={invoice.paid}
-                      disabled={!canManageDrivewiseAccounting}
-                      onChange={(event) =>
-                        toggleInvoiceStatus(invoice.repair.id, invoice, { paid: event.target.checked })
-                      }
-                      type="checkbox"
-                    />
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -761,26 +778,52 @@ function DrivewiseAdminApp() {
         </section>
         )}
 
-        {canViewDrivewiseRecords && (
+        {canViewDrivewiseRecords && activeView === 'repairs' && (
         <section className="panel">
-          <div className="section-heading">
-            <p className="eyebrow">Repairs</p>
-            <h2>Vehicle Repair Records</h2>
+          <div className="section-heading admin-heading-row">
+            <div>
+              <p className="eyebrow">Repairs</p>
+              <h2>Vehicle Repair Records</h2>
+            </div>
+            <div className="view-toggle">
+              <button
+                className={repairView === 'vehicle' ? 'active' : ''}
+                onClick={() => setRepairView('vehicle')}
+                type="button"
+              >
+                By vehicle
+              </button>
+              <button
+                className={repairView === 'vendor' ? 'active' : ''}
+                onClick={() => setRepairView('vendor')}
+                type="button"
+              >
+                By vendor
+              </button>
+            </div>
           </div>
           <div className="drivewise-repair-list">
-            {repairs.map((repair) => (
-              <div className="regular-admin-row drivewise-repair-row" key={repair.id}>
-                <span>
-                  <strong>{repair.ownerName}</strong><br />
-                  {vehicleLabel(repair)} - {repair.status}
-                </span>
-                {canManageDrivewiseRepairs && (
-                <div>
-                  <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
-                  <button className="text-action" onClick={() => deleteRepair(repair.id)} type="button">Delete</button>
-                </div>
-                )}
-              </div>
+            {groupedRepairs.map((group) => (
+              <section className="repair-group" key={group.label}>
+                <h3>{group.label}</h3>
+                {group.repairs.map((repair) => (
+                  <div className="regular-admin-row drivewise-repair-row" key={`${group.label}-${repair.id}`}>
+                    <span>
+                      <strong>{repair.ownerName}</strong><br />
+                      {vehicleLabel(repair)}
+                      {repair.payer ? ` - Payer: ${repair.payer}` : ''}
+                    </span>
+                    {canManageDrivewiseRepairs && (
+                    <div>
+                      <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
+                      {data.role === 'full' && (
+                        <button className="text-action" onClick={() => deleteRepair(repair.id)} type="button">Delete</button>
+                      )}
+                    </div>
+                    )}
+                  </div>
+                ))}
+              </section>
             ))}
           </div>
         </section>
@@ -839,6 +882,21 @@ function readFileAsDataUrl(file) {
 
 function vehicleLabel(repair) {
   return [repair.year, repair.make, repair.model].filter(Boolean).join(' ') || repair.vehicleInfo || ''
+}
+
+function groupRepairs(repairs, mode) {
+  const groups = new Map()
+  for (const repair of repairs) {
+    const labels = mode === 'vendor'
+      ? [...new Set((repair.invoices || []).map((invoice) => invoice.vendor).filter(Boolean))]
+      : [vehicleLabel(repair) || 'Unknown vehicle']
+    for (const label of labels.length ? labels : ['No vendor']) {
+      groups.set(label, [...(groups.get(label) || []), repair])
+    }
+  }
+  return [...groups.entries()]
+    .map(([label, groupRepairs]) => ({ label, repairs: groupRepairs }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 }
 
 function adminRoleLabel(accessLevel) {

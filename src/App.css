@@ -61,8 +61,17 @@ h2 {
   margin-top: 22px;
 }
 
+.top-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .header-actions a,
-.secondary-action {
+.secondary-action,
+.top-menu button,
+.view-toggle button {
   background: #fff;
   border: 1px solid #c8d3dc;
   border-radius: 6px;
@@ -75,8 +84,13 @@ h2 {
 }
 
 .header-actions a:hover,
-.secondary-action:hover {
+.secondary-action:hover,
+.top-menu button:hover,
+.view-toggle button:hover,
+.top-menu button.active,
+.view-toggle button.active {
   border-color: #1f6f8b;
+  box-shadow: inset 0 0 0 1px #1f6f8b;
 }
 
 .section-band {
@@ -256,6 +270,10 @@ button {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-editor > .field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 label {
@@ -532,6 +550,18 @@ dd {
   max-width: 340px;
 }
 
+.form-action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.form-action-row .primary-action {
+  margin-top: 0;
+}
+
 .schedule-filters {
   display: grid;
   gap: 16px;
@@ -635,6 +665,29 @@ dd {
   padding: 16px;
 }
 
+.statement-print-list {
+  border: 1px solid #d7dee6;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  padding: 18px;
+}
+
+.view-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.repair-group {
+  display: grid;
+  gap: 10px;
+}
+
+.repair-group h3 {
+  color: #202833;
+  margin: 8px 0 0;
+}
+
 .drivewise-table input[type="checkbox"] {
   height: 18px;
   width: 18px;
@@ -679,7 +732,8 @@ dd {
   }
 
   .date-grid,
-  .field-grid {
+  .field-grid,
+  .admin-editor > .field-grid {
     grid-template-columns: 1fr;
   }
 

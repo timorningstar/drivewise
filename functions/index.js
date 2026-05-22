@@ -579,7 +579,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     }
 
     if (request.method === "POST" && path === "/drivewise-delete-repair") {
-      const session = await requireAdmin(request, ["full", "admin", "schedule"]);
+      const session = await requireAdmin(request, ["full"]);
       const result = await deleteDrivewiseRepair(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
