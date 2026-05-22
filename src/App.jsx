@@ -212,6 +212,25 @@ function DrivewiseAdminApp() {
     }
   }
 
+  const handleInvoiceFile = async (index, file) => {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      setError('Invoice files need to be JPG, PNG, or PDF.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Invoice files must be smaller than 10 MB.')
+      return
+    }
+    const dataUrl = await readFileAsDataUrl(file)
+    updateInvoice(index, {
+      fileName: file.name,
+      fileContentType: file.type,
+      fileData: dataUrl.split(',')[1],
+      filePreviewUrl: file.type.startsWith('image/') ? dataUrl : '',
+    })
+  }
+
   const addInvoice = () => {
     setRepairForm((current) => ({
       ...current,
@@ -259,6 +278,7 @@ function DrivewiseAdminApp() {
     (repair.invoices || []).map((invoice) => ({ ...invoice, repair })),
   )
   const vendors = [...new Set(invoices.map((invoice) => invoice.vendor).filter(Boolean))].sort()
+  const vendorDatalistId = 'drivewise-vendors'
   const filteredInvoices = invoices.filter((invoice) => {
     const vendorMatches = filters.vendor === 'all' || invoice.vendor === filters.vendor
     const statusMatches =
@@ -454,6 +474,7 @@ function DrivewiseAdminApp() {
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, repairDate: event.target.value }))
                 }
+                required
                 type="date"
                 value={repairForm.repairDate}
               />
@@ -483,14 +504,45 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Vehicle info
+              Year
               <input
                 onChange={(event) =>
-                  setRepairForm((current) => ({ ...current, vehicleInfo: event.target.value }))
+                  setRepairForm((current) => ({ ...current, year: event.target.value }))
                 }
-                placeholder="Year make model, plate, or VIN"
+                placeholder="2020"
                 required
-                value={repairForm.vehicleInfo}
+                value={repairForm.year}
+              />
+            </label>
+            <label>
+              Make
+              <input
+                onChange={(event) =>
+                  setRepairForm((current) => ({ ...current, make: event.target.value }))
+                }
+                placeholder="Toyota"
+                required
+                value={repairForm.make}
+              />
+            </label>
+            <label>
+              Model
+              <input
+                onChange={(event) =>
+                  setRepairForm((current) => ({ ...current, model: event.target.value }))
+                }
+                placeholder="Sienna"
+                required
+                value={repairForm.model}
+              />
+            </label>
+            <label>
+              Payer
+              <input
+                onChange={(event) =>
+                  setRepairForm((current) => ({ ...current, payer: event.target.value }))
+                }
+                value={repairForm.payer}
               />
             </label>
           </div>
@@ -501,6 +553,7 @@ function DrivewiseAdminApp() {
               onChange={(event) =>
                 setRepairForm((current) => ({ ...current, neededRepairs: event.target.value }))
               }
+              required
               rows="3"
               value={repairForm.neededRepairs}
             />
@@ -523,6 +576,9 @@ function DrivewiseAdminApp() {
             </button>
           </div>
           <div className="drivewise-invoice-editor">
+            <datalist id={vendorDatalistId}>
+              {vendors.map((vendor) => <option key={vendor} value={vendor} />)}
+            </datalist>
             {repairForm.invoices.map((invoice, index) => (
               <div className="drivewise-invoice-card" key={invoice.id}>
                 <div className="receipt-card-header">
@@ -535,6 +591,7 @@ function DrivewiseAdminApp() {
                   <label>
                     Vendor
                     <input
+                      list={vendorDatalistId}
                       onChange={(event) => updateInvoice(index, { vendor: event.target.value })}
                       value={invoice.vendor}
                     />
@@ -563,7 +620,40 @@ function DrivewiseAdminApp() {
                       value={invoice.cost}
                     />
                   </label>
+                  <label className="camera-upload-label">
+                    Invoice image or PDF
+                    <input
+                      accept="image/jpeg,image/png,application/pdf"
+                      capture="environment"
+                      className="camera-upload-input"
+                      onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
+                      required={!invoice.invoiceFile && !invoice.fileData}
+                      type="file"
+                    />
+                    <span className="camera-upload-button">
+                      {invoice.fileName || invoice.invoiceFile?.name
+                        ? 'Replace invoice file'
+                        : 'Take photo or upload file'}
+                    </span>
+                    {(invoice.fileName || invoice.invoiceFile?.name) && (
+                      <small className="selected-file-name">
+                        {invoice.fileName || invoice.invoiceFile?.name}
+                      </small>
+                    )}
+                    {invoice.invoiceFile?.url && (
+                      <a className="file-link" href={invoice.invoiceFile.url} rel="noreferrer" target="_blank">
+                        Open saved invoice
+                      </a>
+                    )}
+                  </label>
                 </div>
+                {invoice.filePreviewUrl && (
+                  <img
+                    alt={`Invoice ${index + 1} preview`}
+                    className="receipt-preview"
+                    src={invoice.filePreviewUrl}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -624,6 +714,7 @@ function DrivewiseAdminApp() {
                 <th>Owner / Vehicle</th>
                 <th>Part</th>
                 <th>Cost</th>
+                <th>File</th>
                 <th className="no-print">Checked</th>
                 <th className="no-print">Paid</th>
               </tr>
@@ -633,9 +724,16 @@ function DrivewiseAdminApp() {
                 <tr key={`${invoice.repair.id}-${invoice.id}`}>
                   <td>{invoice.vendor}</td>
                   <td>{invoice.invoiceNumber}</td>
-                  <td>{invoice.repair.ownerName}<br />{invoice.repair.vehicleInfo}</td>
+                  <td>{invoice.repair.ownerName}<br />{vehicleLabel(invoice.repair)}</td>
                   <td>{invoice.partDescription}</td>
                   <td>{formatCurrency(invoice.cost)}</td>
+                  <td>
+                    {invoice.invoiceFile?.url ? (
+                      <a href={invoice.invoiceFile.url} rel="noreferrer" target="_blank">
+                        Invoice
+                      </a>
+                    ) : 'Missing'}
+                  </td>
                   <td className="no-print">
                     <input
                       checked={invoice.statementChecked}
@@ -674,7 +772,7 @@ function DrivewiseAdminApp() {
               <div className="regular-admin-row drivewise-repair-row" key={repair.id}>
                 <span>
                   <strong>{repair.ownerName}</strong><br />
-                  {repair.vehicleInfo} - {repair.status}
+                  {vehicleLabel(repair)} - {repair.status}
                 </span>
                 {canManageDrivewiseRepairs && (
                 <div>
@@ -702,7 +800,11 @@ function emptyDrivewiseRepair() {
     id: '',
     repairDate: '',
     ownerName: '',
+    year: '',
+    make: '',
+    model: '',
     vehicleInfo: '',
+    payer: '',
     neededRepairs: '',
     status: 'Open',
     notes: '',
@@ -717,9 +819,26 @@ function emptyDrivewiseInvoice() {
     invoiceNumber: '',
     partDescription: '',
     cost: '',
+    fileName: '',
+    fileContentType: '',
+    fileData: '',
+    filePreviewUrl: '',
     statementChecked: false,
     paid: false,
   }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('The invoice file could not be read.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function vehicleLabel(repair) {
+  return [repair.year, repair.make, repair.model].filter(Boolean).join(' ') || repair.vehicleInfo || ''
 }
 
 function adminRoleLabel(accessLevel) {

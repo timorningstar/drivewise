@@ -382,6 +382,11 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.file-link {
+  color: #1f6f8b;
+  font-weight: 800;
+}
+
 .receipt-preview {
   border: 1px solid #d7dee6;
   border-radius: 8px;

@@ -8,6 +8,8 @@ admin.initializeApp();
 setGlobalOptions({maxInstances: 10});
 
 const db = admin.firestore();
+const storage = admin.storage();
+const storageBucketName = process.env.STORAGE_BUCKET || "dtmcleaners.appspot.com";
 const APP_ID = "drivewise";
 const adminSessionCollection = db.collection("adminSessions");
 
@@ -192,10 +194,25 @@ async function drivewiseState(session) {
         createdAt: adminRecord.createdAt || "",
       }))
       : [],
-    repairs: session.role === "recovery" ? [] : state.repairs || [],
+    repairs: session.role === "recovery" ? [] : await enrichDrivewiseRepairs(state.repairs || []),
     paymentBatches: session.role === "recovery" ? [] : state.paymentBatches || [],
     adminLog: state.adminLog || [],
   };
+}
+
+async function enrichDrivewiseRepairs(repairs) {
+  return Promise.all((repairs || []).map(async (repair) => ({
+    ...repair,
+    invoices: await Promise.all((repair.invoices || []).map(async (invoice) => ({
+      ...invoice,
+      invoiceFile: invoice.invoiceFile?.storagePath
+        ? {
+          ...invoice.invoiceFile,
+          url: await signedStorageUrl(invoice.invoiceFile.storagePath),
+        }
+        : invoice.invoiceFile || null,
+    }))),
+  })));
 }
 
 async function updateMainAdminAccount(request, session) {
@@ -274,8 +291,17 @@ async function deleteRegularAdmin(request, session) {
 async function saveDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = sanitizeDrivewiseRepair(request.body?.repair || {});
-  if (!repair.ownerName || !repair.vehicleInfo) {
-    return {ok: false, error: "Owner name and vehicle information are required."};
+  if (!repair.repairDate || !repair.ownerName || !repair.year || !repair.make || !repair.model || !repair.neededRepairs) {
+    return {ok: false, error: "Repair date, owner name, year, make, model, and needed repairs are required."};
+  }
+  if (!(repair.invoices || []).length || repair.invoices.some((invoice) => !invoice.invoiceFile && !invoice.fileData)) {
+    return {ok: false, error: "Upload an invoice image or PDF for each invoice."};
+  }
+
+  try {
+    repair.invoices = await saveDrivewiseInvoiceFiles(repair.id, repair.invoices);
+  } catch (error) {
+    return {ok: false, error: error.message};
   }
 
   const existingIndex = (state.repairs || []).findIndex((item) => item.id === repair.id);
@@ -392,13 +418,20 @@ async function createDrivewisePaymentBatch(request, session) {
 
 function sanitizeDrivewiseRepair(input) {
   const invoices = Array.isArray(input.invoices) ? input.invoices : [];
+  const year = clean(input.year);
+  const make = clean(input.make);
+  const model = clean(input.model);
   return {
     id: clean(input.id) || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     createdAt: clean(input.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     repairDate: clean(input.repairDate),
     ownerName: clean(input.ownerName),
-    vehicleInfo: clean(input.vehicleInfo),
+    year,
+    make,
+    model,
+    vehicleInfo: [year, make, model].filter(Boolean).join(" ") || clean(input.vehicleInfo),
+    payer: clean(input.payer),
     neededRepairs: clean(input.neededRepairs),
     status: clean(input.status) || "Open",
     notes: clean(input.notes),
@@ -408,12 +441,75 @@ function sanitizeDrivewiseRepair(input) {
       invoiceNumber: clean(invoice.invoiceNumber),
       partDescription: clean(invoice.partDescription),
       cost: Math.max(0, Number.parseFloat(invoice.cost) || 0),
+      fileName: clean(invoice.fileName),
+      fileContentType: clean(invoice.fileContentType),
+      fileData: clean(invoice.fileData),
+      invoiceFile: invoice.invoiceFile && typeof invoice.invoiceFile === "object" ? {
+        name: clean(invoice.invoiceFile.name),
+        contentType: clean(invoice.invoiceFile.contentType),
+        storagePath: clean(invoice.invoiceFile.storagePath),
+      } : null,
       statementChecked: Boolean(invoice.statementChecked),
       paid: Boolean(invoice.paid),
       paidAt: clean(invoice.paidAt),
       paymentBatchId: clean(invoice.paymentBatchId),
     })),
   };
+}
+
+async function saveDrivewiseInvoiceFiles(repairId, invoices) {
+  return Promise.all(invoices.map(async (invoice, index) => {
+    if (!invoice.fileData) {
+      const storedInvoice = {...invoice};
+      delete storedInvoice.fileData;
+      delete storedInvoice.fileContentType;
+      delete storedInvoice.fileName;
+      return storedInvoice;
+    }
+    if (!["image/jpeg", "image/png", "application/pdf"].includes(invoice.fileContentType)) {
+      throw new Error("Invoice files need to be JPG, PNG, or PDF.");
+    }
+    const buffer = Buffer.from(invoice.fileData, "base64");
+    if (!buffer.length || buffer.length > 10 * 1024 * 1024) {
+      throw new Error("Invoice files must be smaller than 10 MB.");
+    }
+    const extension = invoice.fileContentType === "application/pdf"
+      ? "pdf"
+      : invoice.fileContentType === "image/png" ? "png" : "jpg";
+    const storagePath = `drivewiseInvoices/${repairId}/${invoice.id || `invoice-${index + 1}`}.${extension}`;
+    await storage.bucket(storageBucketName).file(storagePath).save(buffer, {
+      contentType: invoice.fileContentType,
+      metadata: {
+        cacheControl: "private, max-age=0, no-transform",
+      },
+    });
+    const storedInvoice = {...invoice};
+    delete storedInvoice.fileData;
+    delete storedInvoice.fileContentType;
+    delete storedInvoice.fileName;
+    return {
+      ...storedInvoice,
+      invoiceFile: {
+        name: invoice.fileName || `Invoice ${index + 1}`,
+        contentType: invoice.fileContentType,
+        storagePath,
+      },
+    };
+  }));
+}
+
+async function signedStorageUrl(path) {
+  if (!path) return "";
+  try {
+    const [url] = await storage.bucket(storageBucketName).file(path).getSignedUrl({
+      action: "read",
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+    return url;
+  } catch (error) {
+    logger.warn("Could not create DriveWise invoice URL", {path, error: error.message});
+    return "";
+  }
 }
 
 function logStateChange(state, actor, action, details) {
