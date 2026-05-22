@@ -767,7 +767,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     }
 
     if (request.method === "POST" && path === "/drivewise-purge-repairs") {
-      const session = await requireAdmin(request, ["full"]);
+      const session = await requireAdmin(request, ["full", "recovery"]);
       sendJson(response, 200, await purgeDrivewiseRepairData(session));
       return;
     }
