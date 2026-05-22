@@ -555,8 +555,9 @@ function sanitizeDrivewiseRepair(input) {
   const year = clean(input.year);
   const make = clean(input.make);
   const model = clean(input.model);
+  const id = clean(input.id) || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return {
-    id: clean(input.id) || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id,
     createdAt: clean(input.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     repairDate: clean(input.repairDate),
@@ -565,6 +566,7 @@ function sanitizeDrivewiseRepair(input) {
     make,
     model,
     vehicleInfo: [year, make, model].filter(Boolean).join(" ") || clean(input.vehicleInfo),
+    vehicleTrackingId: clean(input.vehicleTrackingId) || id,
     payer: clean(input.payer),
     neededRepairs: clean(input.neededRepairs),
     status: clean(input.status) || "Open",

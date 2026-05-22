@@ -405,6 +405,34 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.vehicle-match-alert {
+  align-items: center;
+  background: #fff8e8;
+  border: 1px solid #e5c76d;
+  border-radius: 8px;
+  color: #202833;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.vehicle-match-alert p {
+  margin: 4px 0 0;
+}
+
+.vehicle-match-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.repair-date-line {
+  color: #697583;
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
 .inline-upload-label {
   color: #8c4f27;
   cursor: pointer;

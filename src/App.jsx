@@ -24,6 +24,27 @@ function repairHasCompletedStatement(repair) {
   return (repair.invoices || []).some((invoice) => invoice.statementComplete)
 }
 
+function normalizeVehiclePart(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function sameVehicleDescription(a, b) {
+  return normalizeVehiclePart(a.year) === normalizeVehiclePart(b.year) &&
+    normalizeVehiclePart(a.make) === normalizeVehiclePart(b.make) &&
+    normalizeVehiclePart(a.model) === normalizeVehiclePart(b.model)
+}
+
+function formatRepairDate(value) {
+  if (!value) return 'No repair date'
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return value
+  return new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  }).format(new Date(year, month - 1, day))
+}
+
 function DrivewiseAdminApp() {
   const [token, setToken] = useState('')
   const [login, setLogin] = useState({ username: '', password: '' })
@@ -87,6 +108,10 @@ function DrivewiseAdminApp() {
     event.preventDefault()
     setError('')
     setMessage('')
+    if (needsVehicleDecision) {
+      setError('Choose whether this is the same vehicle or a different vehicle before saving.')
+      return
+    }
     try {
       const response = await fetch(apiUrl(`/api/drivewise-repair?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
@@ -366,6 +391,17 @@ function DrivewiseAdminApp() {
   const canManageRegularAdmins = data?.role === 'full'
   const canViewDrivewiseRecords = data?.role !== 'recovery'
   const isRepairFormReadOnly = repairForm.id && repairHasCompletedStatement(repairForm)
+  const matchingVehicleRepairs = repairs.filter((repair) =>
+    repair.id !== repairForm.id &&
+    repairForm.year &&
+    repairForm.make &&
+    repairForm.model &&
+    sameVehicleDescription(repair, repairForm),
+  )
+  const needsVehicleDecision = !repairForm.id &&
+    Boolean(matchingVehicleRepairs.length) &&
+    !repairForm.vehicleTrackingId
+  const matchedVehicleRepair = matchingVehicleRepairs[0]
   const invoices = repairs.flatMap((repair) =>
     (repair.invoices || []).map((invoice) => ({ ...invoice, repair })),
   )
@@ -676,7 +712,11 @@ function DrivewiseAdminApp() {
               Year *
               <input
                 onChange={(event) =>
-                  setRepairForm((current) => ({ ...current, year: event.target.value }))
+                  setRepairForm((current) => ({
+                    ...current,
+                    year: event.target.value,
+                    vehicleTrackingId: '',
+                  }))
                 }
                 disabled={isRepairFormReadOnly}
                 placeholder="2020"
@@ -688,7 +728,11 @@ function DrivewiseAdminApp() {
               Make *
               <input
                 onChange={(event) =>
-                  setRepairForm((current) => ({ ...current, make: event.target.value }))
+                  setRepairForm((current) => ({
+                    ...current,
+                    make: event.target.value,
+                    vehicleTrackingId: '',
+                  }))
                 }
                 disabled={isRepairFormReadOnly}
                 placeholder="Toyota"
@@ -700,7 +744,11 @@ function DrivewiseAdminApp() {
               Model *
               <input
                 onChange={(event) =>
-                  setRepairForm((current) => ({ ...current, model: event.target.value }))
+                  setRepairForm((current) => ({
+                    ...current,
+                    model: event.target.value,
+                    vehicleTrackingId: '',
+                  }))
                 }
                 disabled={isRepairFormReadOnly}
                 placeholder="Sienna"
@@ -709,6 +757,44 @@ function DrivewiseAdminApp() {
               />
             </label>
           </div>
+
+          {needsVehicleDecision && (
+            <section className="vehicle-match-alert">
+              <div>
+                <strong>Same vehicle?</strong>
+                <p>
+                  A previous repair record uses {vehicleLabel(matchedVehicleRepair)} for {matchedVehicleRepair.ownerName}
+                  {' '}on {formatRepairDate(matchedVehicleRepair.repairDate)}.
+                </p>
+              </div>
+              <div className="vehicle-match-actions">
+                <button
+                  className="secondary-action"
+                  onClick={() =>
+                    setRepairForm((current) => ({
+                      ...current,
+                      vehicleTrackingId: matchedVehicleRepair.vehicleTrackingId || matchedVehicleRepair.id,
+                    }))
+                  }
+                  type="button"
+                >
+                  Same vehicle
+                </button>
+                <button
+                  className="secondary-action"
+                  onClick={() =>
+                    setRepairForm((current) => ({
+                      ...current,
+                      vehicleTrackingId: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+                    }))
+                  }
+                  type="button"
+                >
+                  Different vehicle
+                </button>
+              </div>
+            </section>
+          )}
 
           <label>
             Needed repairs *
@@ -1048,6 +1134,7 @@ function DrivewiseAdminApp() {
                   <div className="regular-admin-row drivewise-repair-row" key={`${group.label}-${repair.id}`}>
                     <span>
                       <strong>{repair.ownerName}</strong><br />
+                      <span className="repair-date-line">Repair date: {formatRepairDate(repair.repairDate)}</span><br />
                       {vehicleLabel(repair)}
                       {repair.payer ? ` - Payer: ${repair.payer}` : ''}
                       {repairHasCompletedStatement(repair) ? ' - Statement complete' : ''}
@@ -1090,6 +1177,7 @@ function emptyDrivewiseRepair() {
     make: '',
     model: '',
     vehicleInfo: '',
+    vehicleTrackingId: '',
     payer: '',
     neededRepairs: '',
     status: 'Open',
@@ -1134,17 +1222,29 @@ function vehicleLabel(repair) {
 
 function groupRepairs(repairs, mode) {
   const groups = new Map()
-  for (const repair of repairs) {
+  const sortedRepairs = [...repairs].sort((a, b) =>
+    (b.repairDate || '').localeCompare(a.repairDate || '') ||
+    (b.createdAt || '').localeCompare(a.createdAt || ''),
+  )
+  for (const repair of sortedRepairs) {
     const labels = mode === 'vendor'
       ? [...new Set((repair.invoices || []).map((invoice) => invoice.vendor).filter(Boolean))]
-      : [vehicleLabel(repair) || 'Unknown vehicle']
+      : [repair.vehicleTrackingId || repair.id || vehicleLabel(repair) || 'Unknown vehicle']
     for (const label of labels.length ? labels : ['No vendor']) {
-      groups.set(label, [...(groups.get(label) || []), repair])
+      const group = groups.get(label) || {
+        label: mode === 'vendor' ? label : vehicleLabel(repair) || 'Unknown vehicle',
+        repairs: [],
+        latestRepairDate: repair.repairDate || '',
+      }
+      group.repairs.push(repair)
+      if ((repair.repairDate || '') > group.latestRepairDate) group.latestRepairDate = repair.repairDate || ''
+      groups.set(label, group)
     }
   }
-  return [...groups.entries()]
-    .map(([label, groupRepairs]) => ({ label, repairs: groupRepairs }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+  return [...groups.values()].sort((a, b) =>
+    (b.latestRepairDate || '').localeCompare(a.latestRepairDate || '') ||
+    a.label.localeCompare(b.label),
+  )
 }
 
 function adminRoleLabel(accessLevel) {
