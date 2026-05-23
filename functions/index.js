@@ -440,6 +440,41 @@ async function updateDrivewiseInvoiceFile(request, session) {
   return drivewiseState(session);
 }
 
+async function uploadDrivewiseFile(request) {
+  const repairId = clean(request.body?.repairId);
+  const invoiceId = clean(request.body?.invoiceId);
+  const fileKind = clean(request.body?.fileKind);
+  const fileName = clean(request.body?.fileName);
+  const fileContentType = clean(request.body?.fileContentType);
+  const fileData = clean(request.body?.fileData);
+  if (!repairId || !fileKind || !fileName || !fileContentType || !fileData) {
+    return {ok: false, error: "Choose a file to upload."};
+  }
+  try {
+    if (fileKind === "notes") {
+      const notesFile = await saveDrivewiseNotesFile(repairId, {
+        notesFileName: fileName,
+        notesFileContentType: fileContentType,
+        notesFileData: fileData,
+      });
+      return {ok: true, notesFile};
+    }
+    if (fileKind === "invoice") {
+      if (!invoiceId) return {ok: false, error: "Invoice id is required."};
+      const [storedInvoice] = await saveDrivewiseInvoiceFiles(repairId, [{
+        id: invoiceId,
+        fileName,
+        fileContentType,
+        fileData,
+      }]);
+      return {ok: true, invoiceFile: storedInvoice.invoiceFile};
+    }
+    return {ok: false, error: "Unknown file upload type."};
+  } catch (error) {
+    return {ok: false, error: error.message};
+  }
+}
+
 async function completeDrivewiseStatement(request, session) {
   const selectedInvoices = Array.isArray(request.body?.invoices) ? request.body.invoices : [];
   const selectedKeys = new Set(selectedInvoices.map((invoice) => `${clean(invoice.repairId)}:${clean(invoice.invoiceId)}`));
@@ -834,6 +869,13 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     if (request.method === "POST" && path === "/drivewise-invoice-file") {
       const session = await requireAdmin(request, ["full", "admin", "accounting", "schedule"]);
       const result = await updateDrivewiseInvoiceFile(request, session);
+      sendJson(response, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (request.method === "POST" && path === "/drivewise-file-upload") {
+      await requireAdmin(request, ["full", "admin", "schedule"]);
+      const result = await uploadDrivewiseFile(request);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }

@@ -139,12 +139,14 @@ function DrivewiseAdminApp() {
       return
     }
     try {
+      const repairToSave = await prepareRepairForSave(repairForm)
+      setRepairForm(repairToSave)
       const response = await fetch(apiUrl(`/api/drivewise-repair?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ repair: repairForm }),
+        body: JSON.stringify({ repair: repairToSave }),
       })
-      const payload = await response.json().catch(() => ({}))
+      const payload = await readJsonPayload(response)
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Repair could not be saved.')
       setData(payload)
       if (repairForm.recordType === 'shopSupply') {
@@ -159,6 +161,59 @@ function DrivewiseAdminApp() {
     } catch (saveError) {
       setError(saveError.message)
     }
+  }
+
+  const prepareRepairForSave = async (repair) => {
+    const repairId = repair.id || globalThis.crypto.randomUUID()
+    let nextRepair = { ...repair, id: repairId }
+    if (nextRepair.notesFileData) {
+      const notesUpload = await uploadPendingFile({
+        repairId,
+        fileKind: 'notes',
+        fileName: nextRepair.notesFileName,
+        fileContentType: nextRepair.notesFileContentType,
+        fileData: nextRepair.notesFileData,
+      })
+      nextRepair = {
+        ...nextRepair,
+        notesFile: notesUpload.notesFile,
+        notesFileData: '',
+        notesFileContentType: '',
+        notesFileName: '',
+      }
+    }
+    nextRepair.invoices = await Promise.all((nextRepair.invoices || []).map(async (invoice) => {
+      if (!invoice.fileData) return invoice
+      const invoiceId = invoice.id || globalThis.crypto.randomUUID()
+      const upload = await uploadPendingFile({
+        repairId,
+        invoiceId,
+        fileKind: 'invoice',
+        fileName: invoice.fileName,
+        fileContentType: invoice.fileContentType,
+        fileData: invoice.fileData,
+      })
+      return {
+        ...invoice,
+        id: invoiceId,
+        invoiceFile: upload.invoiceFile,
+        fileData: '',
+        fileContentType: '',
+        fileName: '',
+      }
+    }))
+    return nextRepair
+  }
+
+  const uploadPendingFile = async (body) => {
+    const response = await fetch(apiUrl(`/api/drivewise-file-upload?app=${DRIVEWISE_APP_ID}`), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    })
+    const payload = await readJsonPayload(response)
+    if (!response.ok || !payload.ok) throw new Error(payload.error || 'File could not be uploaded.')
+    return payload
   }
 
   const deleteRepair = async (id) => {
@@ -1507,6 +1562,20 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error('The invoice file could not be read.'))
     reader.readAsDataURL(file)
   })
+}
+
+async function readJsonPayload(response) {
+  const text = await response.text().catch(() => '')
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    return {
+      error: response.status === 413
+        ? 'The uploaded invoice files are too large to save at once. Try smaller photos or fewer invoices.'
+        : text.slice(0, 180) || 'Request failed.',
+    }
+  }
 }
 
 function escapeHtml(value) {
