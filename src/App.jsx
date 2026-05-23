@@ -4,6 +4,7 @@ import './App.css'
 const DRIVEWISE_APP_ID = 'drivewise'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const DRIVEWISE_TOKEN_KEY = 'drivewiseAdminToken'
+const HIDDEN_VENDOR_LIST_NAMES = new Set(['amazon - % todd lehman'])
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`
@@ -51,6 +52,10 @@ function todayIsoDate() {
 
 function isShopSupplyRecord(repair) {
   return repair.recordType === 'shopSupply'
+}
+
+function isHiddenVendorListName(vendor) {
+  return HIDDEN_VENDOR_LIST_NAMES.has(String(vendor || '').trim().toLowerCase())
 }
 
 function repairOwnerVehicleLabel(repair) {
@@ -483,7 +488,9 @@ function DrivewiseAdminApp() {
   const invoices = repairs.flatMap((repair) =>
     (repair.invoices || []).map((invoice) => ({ ...invoice, repair })),
   )
-  const vendors = [...new Set(invoices.map((invoice) => invoice.vendor).filter(Boolean))].sort()
+  const vendors = [
+    ...new Set(invoices.map((invoice) => invoice.vendor).filter((vendor) => vendor && !isHiddenVendorListName(vendor))),
+  ].sort()
   const vendorDatalistId = 'drivewise-vendors'
   const invoiceFileHref = (invoice) => {
     if (invoice.invoiceFile?.url) return invoice.invoiceFile.url
