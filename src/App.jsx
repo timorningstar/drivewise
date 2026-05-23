@@ -728,6 +728,15 @@ function DrivewiseAdminApp() {
               >
                 Vendor Invoice View
               </button>
+              {data.role === 'full' && (
+                <button
+                  className={activeView === 'admin' ? 'active' : ''}
+                  onClick={() => setActiveView('admin')}
+                  type="button"
+                >
+                  Admin
+                </button>
+              )}
             </nav>
           )}
         </div>
@@ -1092,7 +1101,7 @@ function DrivewiseAdminApp() {
 
           <div className="field-grid">
             <label>
-              Supply date *
+              Invoice date *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, repairDate: event.target.value }))
@@ -1103,37 +1112,6 @@ function DrivewiseAdminApp() {
               />
             </label>
           </div>
-
-          <label>
-            Notes
-            <textarea
-              onChange={(event) =>
-                setRepairForm((current) => ({ ...current, notes: event.target.value }))
-              }
-              rows="3"
-              value={repairForm.notes}
-            />
-          </label>
-          <label className="camera-upload-label notes-upload-label">
-            Notes image or PDF
-            <input
-              accept="image/jpeg,image/png,application/pdf"
-              capture="environment"
-              className="camera-upload-input"
-              onChange={(event) => handleNotesFile(event.target.files?.[0])}
-              type="file"
-            />
-            <span className="camera-upload-button">
-              {repairForm.notesFileName || repairForm.notesFile?.name
-                ? 'Replace notes file'
-                : 'Take photo or upload notes file'}
-            </span>
-            {(repairForm.notesFileName || repairForm.notesFile?.name) && (
-              <small className="selected-file-name">
-                {repairForm.notesFileName || repairForm.notesFile?.name}
-              </small>
-            )}
-          </label>
 
           <div className="date-editor-header">
             <strong>Parts and invoices</strong>
@@ -1431,7 +1409,7 @@ function DrivewiseAdminApp() {
         </section>
         )}
 
-        {data.role === 'full' && canManageMainAccount && adminAccountPanel}
+        {data.role === 'full' && canManageMainAccount && activeView === 'admin' && adminAccountPanel}
 
         {message && <p className="success-message admin-message">{message}</p>}
         {error && <p className="error-message admin-message">{error}</p>}
