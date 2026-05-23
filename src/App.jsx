@@ -216,7 +216,9 @@ function DrivewiseAdminApp() {
     return payload
   }
 
-  const deleteRepair = async (id) => {
+  const deleteRepair = async (id, options = {}) => {
+    const label = options.label || 'repair record'
+    if (options.confirm && !window.confirm(`Delete this ${label}?`)) return
     setError('')
     setMessage('')
     try {
@@ -226,9 +228,9 @@ function DrivewiseAdminApp() {
         body: JSON.stringify({ id }),
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload.ok) throw new Error(payload.error || 'Repair could not be deleted.')
+      if (!response.ok || !payload.ok) throw new Error(payload.error || `${label} could not be deleted.`)
       setData(payload)
-      setMessage('Repair record deleted.')
+      setMessage(`${label.charAt(0).toUpperCase()}${label.slice(1)} deleted.`)
     } catch (deleteError) {
       setError(deleteError.message)
     }
@@ -1522,6 +1524,7 @@ function DrivewiseAdminApp() {
                 <th>Part</th>
                 <th>Cost</th>
                 <th>Invoice</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -1541,6 +1544,18 @@ function DrivewiseAdminApp() {
                       ) : (
                         'Missing'
                       )}
+                    </td>
+                    <td>
+                      {!repairHasCompletedStatement(record) && (
+                        <button
+                          className="text-action"
+                          onClick={() => deleteRepair(record.id, { confirm: true, label: 'shop supply invoice' })}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      )}
+                      {repairHasCompletedStatement(record) && 'Locked'}
                     </td>
                   </tr>
                 )),
