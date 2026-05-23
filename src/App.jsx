@@ -625,6 +625,9 @@ function DrivewiseAdminApp() {
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
   const groupedRepairs = groupRepairs(repairs.filter((repair) => !isShopSupplyRecord(repair)), repairView)
+  const shopSupplyRecords = repairs
+    .filter(isShopSupplyRecord)
+    .sort((a, b) => (b.repairDate || '').localeCompare(a.repairDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
   const adminAccountPanel = (
     <section className="panel admin-account-panel">
       <div className="section-heading">
@@ -792,6 +795,13 @@ function DrivewiseAdminApp() {
                 New Repair Record
               </button>
               <button
+                className={activeView === 'supplies' ? 'active' : ''}
+                onClick={startShopSupplies}
+                type="button"
+              >
+                New Shop Supplies
+              </button>
+              <button
                 className={activeView === 'repairs' ? 'active' : ''}
                 onClick={() => setActiveView('repairs')}
                 type="button"
@@ -799,11 +809,11 @@ function DrivewiseAdminApp() {
                 Vehicle Repair Records
               </button>
               <button
-                className={activeView === 'supplies' ? 'active' : ''}
-                onClick={startShopSupplies}
+                className={activeView === 'supplyRecords' ? 'active' : ''}
+                onClick={() => setActiveView('supplyRecords')}
                 type="button"
               >
-                Shop Supplies
+                Shop Supplies Records
               </button>
               <button
                 className={activeView === 'invoices' ? 'active' : ''}
@@ -1492,6 +1502,51 @@ function DrivewiseAdminApp() {
               </section>
             ))}
           </div>
+        </section>
+        )}
+
+        {canViewDrivewiseRecords && activeView === 'supplyRecords' && (
+        <section className="panel">
+          <div className="section-heading admin-heading-row">
+            <div>
+              <p className="eyebrow">Shop Supplies</p>
+              <h2>Shop Supplies Records</h2>
+            </div>
+          </div>
+          <table className="schedule-table drivewise-table">
+            <thead>
+              <tr>
+                <th>Invoice date</th>
+                <th>Vendor</th>
+                <th>Invoice #</th>
+                <th>Part</th>
+                <th>Cost</th>
+                <th>Invoice</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shopSupplyRecords.flatMap((record) =>
+                (record.invoices || []).map((invoice) => (
+                  <tr key={`${record.id}-${invoice.id}`}>
+                    <td>{formatRepairDate(record.repairDate)}</td>
+                    <td>{invoice.vendor}</td>
+                    <td>{invoice.invoiceNumber}</td>
+                    <td>{invoice.partDescription}</td>
+                    <td>{formatCurrency(invoice.cost)}</td>
+                    <td>
+                      {invoiceFileHref(invoice) ? (
+                        <a href={invoiceFileHref(invoice)} rel="noreferrer" target="_blank">
+                          Invoice
+                        </a>
+                      ) : (
+                        'Missing'
+                      )}
+                    </td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
         </section>
         )}
 
