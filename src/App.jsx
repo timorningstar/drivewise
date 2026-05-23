@@ -63,6 +63,14 @@ function repairOwnerVehicleLabel(repair) {
   return `${repair.ownerName}\n${vehicleLabel(repair)}`
 }
 
+function invoiceOwnerLabel(invoice) {
+  return isShopSupplyRecord(invoice.repair) ? 'Shop Supplies' : invoice.repair.ownerName || ''
+}
+
+function compareText(a, b) {
+  return String(a || '').localeCompare(String(b || ''))
+}
+
 function DrivewiseAdminApp() {
   const [token, setToken] = useState('')
   const [login, setLogin] = useState({ username: '', password: '' })
@@ -531,19 +539,33 @@ function DrivewiseAdminApp() {
     return null
   }
   const openInvoices = invoices.filter((invoice) => !invoice.statementComplete)
+  const isStatementSort = ['owner', 'vehicle'].includes(filters.statement)
   const filteredInvoices = invoices.filter((invoice) => {
     const vendorMatches = filters.vendor === 'all' || invoice.vendor === filters.vendor
     const statementMatches =
+      isStatementSort ||
       filters.statement === 'all' ||
       (filters.statement === 'unchecked' && !invoice.statementComplete && !invoice.statementChecked) ||
       (filters.statement === 'checked' && invoice.statementComplete)
     return vendorMatches && statementMatches
-  }).sort((a, b) =>
-    Number(a.statementComplete) - Number(b.statementComplete) ||
-    Number(a.statementChecked) - Number(b.statementChecked) ||
-    a.vendor.localeCompare(b.vendor) ||
-    a.invoiceNumber.localeCompare(b.invoiceNumber),
-  )
+  }).sort((a, b) => {
+    if (filters.statement === 'owner') {
+      return compareText(invoiceOwnerLabel(a), invoiceOwnerLabel(b)) ||
+        compareText(vehicleLabel(a.repair), vehicleLabel(b.repair)) ||
+        compareText(a.vendor, b.vendor) ||
+        compareText(a.invoiceNumber, b.invoiceNumber)
+    }
+    if (filters.statement === 'vehicle') {
+      return compareText(vehicleLabel(a.repair), vehicleLabel(b.repair)) ||
+        compareText(invoiceOwnerLabel(a), invoiceOwnerLabel(b)) ||
+        compareText(a.vendor, b.vendor) ||
+        compareText(a.invoiceNumber, b.invoiceNumber)
+    }
+    return Number(a.statementComplete) - Number(b.statementComplete) ||
+      Number(a.statementChecked) - Number(b.statementChecked) ||
+      compareText(a.vendor, b.vendor) ||
+      compareText(a.invoiceNumber, b.invoiceNumber)
+  })
   const statementInvoices = openInvoices
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
@@ -1244,6 +1266,8 @@ function DrivewiseAdminApp() {
                 <option value="all">All invoices</option>
                 <option value="unchecked">Unchecked</option>
                 <option value="checked">Statement checked</option>
+                <option value="owner">By Owner</option>
+                <option value="vehicle">By Vehicle</option>
               </select>
             </label>
           </div>
