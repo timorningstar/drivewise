@@ -819,32 +819,44 @@ function DrivewiseAdminApp() {
               value={repairForm.notes}
             />
           </label>
-          <label className="camera-upload-label notes-upload-label">
-            Notes image or PDF
-            <input
-              accept="image/jpeg,image/png,application/pdf"
-              capture="environment"
-              className="camera-upload-input"
-              disabled={isRepairFormReadOnly}
-              onChange={(event) => handleNotesFile(event.target.files?.[0])}
-              type="file"
-            />
-            <span className="camera-upload-button">
-              {repairForm.notesFileName || repairForm.notesFile?.name
-                ? 'Replace notes file'
-                : 'Take photo or upload notes file'}
-            </span>
-            {(repairForm.notesFileName || repairForm.notesFile?.name) && (
-              <small className="selected-file-name">
-                {repairForm.notesFileName || repairForm.notesFile?.name}
-              </small>
-            )}
-            {notesFileHref(repairForm) && (
-              <a className="file-link" href={notesFileHref(repairForm)} rel="noreferrer" target="_blank">
-                Open saved notes file
-              </a>
-            )}
-          </label>
+          {!isRepairFormReadOnly && (
+            <label className="camera-upload-label notes-upload-label">
+              Notes image or PDF
+              <input
+                accept="image/jpeg,image/png,application/pdf"
+                capture="environment"
+                className="camera-upload-input"
+                onChange={(event) => handleNotesFile(event.target.files?.[0])}
+                type="file"
+              />
+              <span className="camera-upload-button">
+                {repairForm.notesFileName || repairForm.notesFile?.name
+                  ? 'Replace notes file'
+                  : 'Take photo or upload notes file'}
+              </span>
+              {(repairForm.notesFileName || repairForm.notesFile?.name) && (
+                <small className="selected-file-name">
+                  {repairForm.notesFileName || repairForm.notesFile?.name}
+                </small>
+              )}
+              {notesFileHref(repairForm) && (
+                <a className="file-link" href={notesFileHref(repairForm)} rel="noreferrer" target="_blank">
+                  Open saved notes file
+                </a>
+              )}
+            </label>
+          )}
+          {isRepairFormReadOnly && (repairForm.notesFileName || repairForm.notesFile?.name) && (
+            <div className="readonly-file-row">
+              <strong>Notes file</strong>
+              <span>{repairForm.notesFileName || repairForm.notesFile?.name}</span>
+              {notesFileHref(repairForm) && (
+                <a className="file-link" href={notesFileHref(repairForm)} rel="noreferrer" target="_blank">
+                  Open saved notes file
+                </a>
+              )}
+            </div>
+          )}
           {notesPreview(repairForm)?.type === 'image' && (
             <img
               alt="Notes attachment preview"
@@ -913,33 +925,45 @@ function DrivewiseAdminApp() {
                       value={invoice.cost}
                     />
                   </label>
-                  <label className="camera-upload-label">
-                    Invoice image or PDF *
-                    <input
-                      accept="image/jpeg,image/png,application/pdf"
-                      capture="environment"
-                      className="camera-upload-input"
-                      disabled={isRepairFormReadOnly}
-                      onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
-                      required={!invoice.invoiceFile && !invoice.fileData}
-                      type="file"
-                    />
-                    <span className="camera-upload-button">
-                      {invoice.fileName || invoice.invoiceFile?.name
-                        ? 'Replace invoice file'
-                        : 'Take photo or upload file'}
-                    </span>
-                    {(invoice.fileName || invoice.invoiceFile?.name) && (
-                      <small className="selected-file-name">
-                        {invoice.fileName || invoice.invoiceFile?.name}
-                      </small>
-                    )}
-                    {invoiceFileHref(invoice) && (
-                      <a className="file-link" href={invoiceFileHref(invoice)} rel="noreferrer" target="_blank">
-                        Open saved invoice
-                      </a>
-                    )}
-                  </label>
+                  {!isRepairFormReadOnly && (
+                    <label className="camera-upload-label">
+                      Invoice image or PDF *
+                      <input
+                        accept="image/jpeg,image/png,application/pdf"
+                        capture="environment"
+                        className="camera-upload-input"
+                        onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
+                        required={!invoice.invoiceFile && !invoice.fileData}
+                        type="file"
+                      />
+                      <span className="camera-upload-button">
+                        {invoice.fileName || invoice.invoiceFile?.name
+                          ? 'Replace invoice file'
+                          : 'Take photo or upload file'}
+                      </span>
+                      {(invoice.fileName || invoice.invoiceFile?.name) && (
+                        <small className="selected-file-name">
+                          {invoice.fileName || invoice.invoiceFile?.name}
+                        </small>
+                      )}
+                      {invoiceFileHref(invoice) && (
+                        <a className="file-link" href={invoiceFileHref(invoice)} rel="noreferrer" target="_blank">
+                          Open saved invoice
+                        </a>
+                      )}
+                    </label>
+                  )}
+                  {isRepairFormReadOnly && (invoice.fileName || invoice.invoiceFile?.name) && (
+                    <div className="readonly-file-row">
+                      <strong>Invoice file</strong>
+                      <span>{invoice.fileName || invoice.invoiceFile?.name}</span>
+                      {invoiceFileHref(invoice) && (
+                        <a className="file-link" href={invoiceFileHref(invoice)} rel="noreferrer" target="_blank">
+                          Open saved invoice
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {invoicePreview(invoice)?.type === 'image' && (
                   <img

@@ -400,6 +400,19 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.readonly-file-row {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.readonly-file-row span {
+  color: #697583;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
 .file-link {
   color: #1f6f8b;
   font-weight: 800;
