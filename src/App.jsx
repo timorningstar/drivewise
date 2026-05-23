@@ -1248,7 +1248,7 @@ function groupRepairs(repairs, mode) {
 }
 
 function adminRoleLabel(accessLevel) {
-  if (accessLevel === 'admin') return 'Admin - all except account setup'
+  if (accessLevel === 'admin') return 'Admin - all except admin account setup'
   if (accessLevel === 'accounting') return 'Accounting only'
   if (accessLevel === 'schedule') return 'Repairs only'
   return accessLevel || 'Repairs only'

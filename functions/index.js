@@ -74,10 +74,17 @@ function normalizeState(input) {
     regularAdmins: Array.isArray(source.regularAdmins)
       ? source.regularAdmins.map((record) => ({
         ...normalizeCredentialRecord(record),
-        accessLevel: ["full", "admin", "schedule", "accounting"].includes(record?.accessLevel) ? record.accessLevel : "schedule",
+        accessLevel: normalizeAccessLevel(record?.accessLevel),
       }))
       : [],
   };
+}
+
+function normalizeAccessLevel(accessLevel) {
+  const normalized = clean(accessLevel).toLowerCase();
+  if (normalized === "sdmin") return "admin";
+  if (["full", "admin", "schedule", "accounting"].includes(normalized)) return normalized;
+  return "schedule";
 }
 
 async function adminLogin(request) {
@@ -113,9 +120,7 @@ async function adminLogin(request) {
       && credentialMatches(record, passwordHash, password)
     ));
     if (regularAdmin) {
-      role = ["full", "admin", "schedule", "accounting"].includes(regularAdmin.accessLevel)
-        ? regularAdmin.accessLevel
-        : "schedule";
+      role = normalizeAccessLevel(regularAdmin.accessLevel);
       adminId = regularAdmin.id;
       displayName = regularAdmin.username;
       forcePasswordChange = Boolean(regularAdmin.forcePasswordChange);
@@ -194,7 +199,7 @@ async function drivewiseState(session) {
       ? (state.regularAdmins || []).map((adminRecord) => ({
         id: adminRecord.id,
         username: adminRecord.username,
-        accessLevel: adminRecord.accessLevel || "schedule",
+        accessLevel: normalizeAccessLevel(adminRecord.accessLevel),
         createdAt: adminRecord.createdAt || "",
       }))
       : [],
@@ -252,8 +257,9 @@ async function updateMainAdminAccount(request, session) {
 async function addRegularAdmin(request, session) {
   const username = clean(request.body?.username);
   const password = clean(request.body?.password);
-  const accessLevel = ["admin", "schedule", "accounting"].includes(clean(request.body?.accessLevel))
-    ? clean(request.body?.accessLevel)
+  const requestedAccessLevel = normalizeAccessLevel(request.body?.accessLevel);
+  const accessLevel = ["admin", "schedule", "accounting"].includes(requestedAccessLevel)
+    ? requestedAccessLevel
     : "admin";
   if (!username || !password) return {ok: false, error: "Enter a login name and password."};
   if (password.length < 6) return {ok: false, error: "Password must be at least 6 characters."};
