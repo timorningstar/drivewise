@@ -307,8 +307,19 @@ async function deleteRegularAdmin(request, session) {
 async function saveDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = sanitizeDrivewiseRepair(request.body?.repair || {});
-  if (!repair.repairDate || !repair.ownerName || !repair.year || !repair.make || !repair.model || !repair.neededRepairs) {
+  if (repair.recordType === "shopSupply") {
+    repair.ownerName = "Shop Supplies";
+    repair.vehicleInfo = "Shop Supplies";
+    repair.neededRepairs = repair.neededRepairs || "Shop supplies";
+  }
+  if (
+    repair.recordType !== "shopSupply" &&
+    (!repair.repairDate || !repair.ownerName || !repair.year || !repair.make || !repair.model || !repair.neededRepairs)
+  ) {
     return {ok: false, error: "Repair date, owner name, year, make, model, and needed repairs are required."};
+  }
+  if (repair.recordType === "shopSupply" && !repair.repairDate) {
+    return {ok: false, error: "Supply date is required."};
   }
   if (!(repair.invoices || []).length || repair.invoices.some((invoice) => !invoice.invoiceFile && !invoice.fileData)) {
     return {ok: false, error: "Upload an invoice image or PDF for each invoice."};
@@ -341,8 +352,8 @@ async function saveDrivewiseRepair(request, session) {
   logStateChange(
     state,
     session.username,
-    existingIndex >= 0 ? "Update DriveWise repair" : "Add DriveWise repair",
-    `${session.username} saved repair record for ${repair.ownerName}.`,
+    existingIndex >= 0 ? "Update DriveWise record" : "Add DriveWise record",
+    `${session.username} saved ${repair.recordType === "shopSupply" ? "shop supply" : "repair"} record for ${repair.ownerName}.`,
   );
   await writeState(state);
   return drivewiseState(session);
@@ -562,8 +573,10 @@ function sanitizeDrivewiseRepair(input) {
   const make = clean(input.make);
   const model = clean(input.model);
   const id = clean(input.id) || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const recordType = clean(input.recordType) === "shopSupply" ? "shopSupply" : "repair";
   return {
     id,
+    recordType,
     createdAt: clean(input.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     repairDate: clean(input.repairDate),

@@ -45,6 +45,19 @@ function formatRepairDate(value) {
   }).format(new Date(year, month - 1, day))
 }
 
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function isShopSupplyRecord(repair) {
+  return repair.recordType === 'shopSupply'
+}
+
+function repairOwnerVehicleLabel(repair) {
+  if (isShopSupplyRecord(repair)) return 'Shop Supplies'
+  return `${repair.ownerName}\n${vehicleLabel(repair)}`
+}
+
 function DrivewiseAdminApp() {
   const [token, setToken] = useState('')
   const [login, setLogin] = useState({ username: '', password: '' })
@@ -121,9 +134,15 @@ function DrivewiseAdminApp() {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Repair could not be saved.')
       setData(payload)
-      setRepairForm(emptyDrivewiseRepair())
-      setMessage('DriveWise repair record saved.')
-      setActiveView('entry')
+      if (repairForm.recordType === 'shopSupply') {
+        setRepairForm(emptyShopSupplyRecord())
+        setMessage('Shop supply invoice saved.')
+        setActiveView('supplies')
+      } else {
+        setRepairForm(emptyDrivewiseRepair())
+        setMessage('DriveWise repair record saved.')
+        setActiveView('entry')
+      }
     } catch (saveError) {
       setError(saveError.message)
     }
@@ -166,6 +185,9 @@ function DrivewiseAdminApp() {
 
   const completeStatementInvoices = async () => {
     if (!statementInvoices.length) return
+    if (!window.confirm('Mark the selected statement invoices complete? Completed invoices will be locked from editing.')) {
+      return
+    }
     setError('')
     setMessage('')
     try {
@@ -378,6 +400,62 @@ function DrivewiseAdminApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const startShopSupplies = () => {
+    setRepairForm(emptyShopSupplyRecord())
+    setMessage('')
+    setError('')
+    setActiveView('supplies')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const printStatementWithInvoices = () => {
+    const rows = statementInvoices.map((invoice) => {
+      const href = invoiceFileHref(invoice)
+      const contentType = invoice.invoiceFile?.contentType || invoice.fileContentType || ''
+      const invoiceFrame = href && contentType === 'application/pdf'
+        ? `<iframe class="invoice-frame" src="${escapeHtml(href)}" title="Invoice ${escapeHtml(invoice.invoiceNumber)}"></iframe>`
+        : href
+          ? `<img class="invoice-image" src="${escapeHtml(href)}" alt="Invoice ${escapeHtml(invoice.invoiceNumber)}" />`
+          : '<p>Invoice file missing.</p>'
+      return {
+        tableRow: `<tr><td>${escapeHtml(invoice.vendor)}</td><td>${escapeHtml(invoice.invoiceNumber)}</td><td>${escapeHtml(repairOwnerVehicleLabel(invoice.repair)).replace(/\n/g, '<br>')}</td><td>${escapeHtml(formatCurrency(invoice.cost))}</td></tr>`,
+        invoicePage: `<section class="invoice-page"><h2>${escapeHtml(invoice.vendor)} - Invoice ${escapeHtml(invoice.invoiceNumber)}</h2>${invoiceFrame}</section>`,
+      }
+    })
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      setError('The print window was blocked. Allow pop-ups for DriveWise and try again.')
+      return
+    }
+    printWindow.document.write(`<!doctype html>
+      <html>
+        <head>
+          <title>DriveWise statement invoices</title>
+          <style>
+            body { color: #111827; font-family: Arial, sans-serif; margin: 24px; }
+            h1 { font-size: 24px; margin: 0 0 16px; }
+            h2 { font-size: 18px; margin: 0 0 12px; }
+            table { border-collapse: collapse; margin-bottom: 24px; width: 100%; }
+            th, td { border-bottom: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+            th { color: #475569; font-size: 12px; text-transform: uppercase; }
+            .invoice-page { break-before: page; page-break-before: always; }
+            .invoice-frame { border: 0; height: 10in; width: 100%; }
+            .invoice-image { display: block; max-height: 10in; max-width: 100%; object-fit: contain; }
+          </style>
+        </head>
+        <body>
+          <h1>Invoices Selected for Payment</h1>
+          <table>
+            <thead><tr><th>Vendor</th><th>Invoice #</th><th>Owner / Vehicle</th><th>Cost</th></tr></thead>
+            <tbody>${rows.map((row) => row.tableRow).join('')}</tbody>
+          </table>
+          ${rows.map((row) => row.invoicePage).join('')}
+          <script>setTimeout(() => window.print(), 1200)</script>
+        </body>
+      </html>`)
+    printWindow.document.close()
+  }
+
   const logout = () => {
     sessionStorage.removeItem(DRIVEWISE_TOKEN_KEY)
     setToken('')
@@ -462,7 +540,7 @@ function DrivewiseAdminApp() {
   const statementInvoices = openInvoices
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
-  const groupedRepairs = groupRepairs(repairs, repairView)
+  const groupedRepairs = groupRepairs(repairs.filter((repair) => !isShopSupplyRecord(repair)), repairView)
   const adminAccountPanel = (
     <section className="panel admin-account-panel">
       <div className="section-heading">
@@ -635,6 +713,13 @@ function DrivewiseAdminApp() {
                 type="button"
               >
                 Vehicle Repair Records
+              </button>
+              <button
+                className={activeView === 'supplies' ? 'active' : ''}
+                onClick={startShopSupplies}
+                type="button"
+              >
+                Shop Supplies
               </button>
               <button
                 className={activeView === 'invoices' ? 'active' : ''}
@@ -993,6 +1078,158 @@ function DrivewiseAdminApp() {
         </form>
         )}
 
+        {canManageDrivewiseRepairs && activeView === 'supplies' && (
+        <form className="panel admin-editor" onSubmit={saveRepair}>
+          <div className="section-heading admin-heading-row">
+            <div>
+              <p className="eyebrow">Shop Supplies</p>
+              <h2>Shop Supply Invoices</h2>
+            </div>
+            <button className="secondary-action" onClick={startShopSupplies} type="button">
+              Clear form
+            </button>
+          </div>
+
+          <div className="field-grid">
+            <label>
+              Supply date *
+              <input
+                onChange={(event) =>
+                  setRepairForm((current) => ({ ...current, repairDate: event.target.value }))
+                }
+                required
+                type="date"
+                value={repairForm.repairDate}
+              />
+            </label>
+          </div>
+
+          <label>
+            Notes
+            <textarea
+              onChange={(event) =>
+                setRepairForm((current) => ({ ...current, notes: event.target.value }))
+              }
+              rows="3"
+              value={repairForm.notes}
+            />
+          </label>
+          <label className="camera-upload-label notes-upload-label">
+            Notes image or PDF
+            <input
+              accept="image/jpeg,image/png,application/pdf"
+              capture="environment"
+              className="camera-upload-input"
+              onChange={(event) => handleNotesFile(event.target.files?.[0])}
+              type="file"
+            />
+            <span className="camera-upload-button">
+              {repairForm.notesFileName || repairForm.notesFile?.name
+                ? 'Replace notes file'
+                : 'Take photo or upload notes file'}
+            </span>
+            {(repairForm.notesFileName || repairForm.notesFile?.name) && (
+              <small className="selected-file-name">
+                {repairForm.notesFileName || repairForm.notesFile?.name}
+              </small>
+            )}
+          </label>
+
+          <div className="date-editor-header">
+            <strong>Parts and invoices</strong>
+          </div>
+          <div className="drivewise-invoice-editor">
+            <datalist id={vendorDatalistId}>
+              {vendors.map((vendor) => <option key={vendor} value={vendor} />)}
+            </datalist>
+            {repairForm.invoices.map((invoice, index) => (
+              <div className="drivewise-invoice-card" key={invoice.id}>
+                <div className="receipt-card-header">
+                  <strong>Invoice {index + 1}</strong>
+                  <button className="text-action" onClick={() => removeInvoice(index)} type="button">
+                    Remove
+                  </button>
+                </div>
+                <div className="field-grid">
+                  <label>
+                    Vendor
+                    <input
+                      list={vendorDatalistId}
+                      onChange={(event) => updateInvoice(index, { vendor: event.target.value })}
+                      value={invoice.vendor}
+                    />
+                  </label>
+                  <label>
+                    Invoice #
+                    <input
+                      onChange={(event) => updateInvoice(index, { invoiceNumber: event.target.value })}
+                      value={invoice.invoiceNumber}
+                    />
+                  </label>
+                  <label>
+                    Part description
+                    <input
+                      onChange={(event) => updateInvoice(index, { partDescription: event.target.value })}
+                      value={invoice.partDescription}
+                    />
+                  </label>
+                  <label>
+                    Cost
+                    <input
+                      onChange={(event) => updateInvoice(index, { cost: event.target.value })}
+                      step="0.01"
+                      type="number"
+                      value={invoice.cost}
+                    />
+                  </label>
+                  <label className="camera-upload-label">
+                    Invoice image or PDF *
+                    <input
+                      accept="image/jpeg,image/png,application/pdf"
+                      capture="environment"
+                      className="camera-upload-input"
+                      onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
+                      required={!invoice.invoiceFile && !invoice.fileData}
+                      type="file"
+                    />
+                    <span className="camera-upload-button">
+                      {invoice.fileName || invoice.invoiceFile?.name
+                        ? 'Replace invoice file'
+                        : 'Take photo or upload file'}
+                    </span>
+                    {(invoice.fileName || invoice.invoiceFile?.name) && (
+                      <small className="selected-file-name">
+                        {invoice.fileName || invoice.invoiceFile?.name}
+                      </small>
+                    )}
+                  </label>
+                </div>
+                {invoicePreview(invoice)?.type === 'image' && (
+                  <img
+                    alt={`Invoice ${index + 1} preview`}
+                    className="receipt-preview"
+                    src={invoicePreview(invoice).href}
+                  />
+                )}
+                {invoicePreview(invoice)?.type === 'pdf' && (
+                  <iframe
+                    className="invoice-pdf-preview"
+                    src={invoicePreview(invoice).href}
+                    title={`Invoice ${index + 1} PDF preview`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="form-action-row">
+            <button className="secondary-action" onClick={addInvoice} type="button">
+              Add another invoice
+            </button>
+            <button className="primary-action admin-save" type="submit">Save shop supply invoices</button>
+          </div>
+        </form>
+        )}
+
         {canViewDrivewiseRecords && activeView === 'invoices' && (
         <section className="panel printable-schedule">
           <div className="section-heading admin-heading-row no-print">
@@ -1035,6 +1272,9 @@ function DrivewiseAdminApp() {
                 </div>
                 <button className="secondary-action" onClick={() => window.print()} type="button">
                   Print statement list
+                </button>
+                <button className="secondary-action" onClick={printStatementWithInvoices} type="button">
+                  Print statement list with invoices
                 </button>
                 <button className="secondary-action" onClick={completeStatementInvoices} type="button">
                   Mark complete
@@ -1089,7 +1329,15 @@ function DrivewiseAdminApp() {
                 <tr key={`${invoice.repair.id}-${invoice.id}`}>
                   <td>{invoice.vendor}</td>
                   <td>{invoice.invoiceNumber}</td>
-                  <td>{invoice.repair.ownerName}<br />{vehicleLabel(invoice.repair)}</td>
+                  <td>
+                    {isShopSupplyRecord(invoice.repair) ? (
+                      'Shop Supplies'
+                    ) : (
+                      <>
+                        {invoice.repair.ownerName}<br />{vehicleLabel(invoice.repair)}
+                      </>
+                    )}
+                  </td>
                   <td>{invoice.partDescription}</td>
                   <td>{formatCurrency(invoice.cost)}</td>
                   <td>
@@ -1195,6 +1443,7 @@ function DrivewiseAdminApp() {
 function emptyDrivewiseRepair() {
   return {
     id: '',
+    recordType: 'repair',
     repairDate: '',
     ownerName: '',
     year: '',
@@ -1212,6 +1461,17 @@ function emptyDrivewiseRepair() {
     notesFilePreviewUrl: '',
     notesFile: null,
     invoices: [emptyDrivewiseInvoice()],
+  }
+}
+
+function emptyShopSupplyRecord() {
+  return {
+    ...emptyDrivewiseRepair(),
+    recordType: 'shopSupply',
+    repairDate: todayIsoDate(),
+    ownerName: 'Shop Supplies',
+    vehicleInfo: 'Shop Supplies',
+    neededRepairs: 'Shop supplies',
   }
 }
 
@@ -1240,7 +1500,17 @@ function readFileAsDataUrl(file) {
   })
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
 function vehicleLabel(repair) {
+  if (isShopSupplyRecord(repair)) return 'Shop Supplies'
   return [repair.year, repair.make, repair.model].filter(Boolean).join(' ') || repair.vehicleInfo || ''
 }
 
