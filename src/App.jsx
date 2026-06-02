@@ -513,6 +513,8 @@ function DrivewiseAdminApp() {
             .statement-page { break-after: page; page-break-after: always; }
             .invoice-page {
               break-before: page;
+              display: flex;
+              flex-direction: column;
               height: 10.3in;
               overflow: hidden;
               page-break-before: always;
@@ -522,10 +524,12 @@ function DrivewiseAdminApp() {
               border: 0;
               display: block;
               height: 9.85in;
+              margin-left: auto;
+              margin-right: auto;
               max-height: 9.85in;
               max-width: 100%;
               object-fit: contain;
-              object-position: top left;
+              object-position: top center;
               width: 100%;
             }
             .invoice-image { object-fit: contain; }
