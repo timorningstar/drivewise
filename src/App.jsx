@@ -483,9 +483,9 @@ function DrivewiseAdminApp() {
       const href = invoiceFileHref(invoice)
       const contentType = invoice.invoiceFile?.contentType || invoice.fileContentType || ''
       const invoiceFrame = href && contentType === 'application/pdf'
-        ? `<iframe class="invoice-frame" src="${escapeHtml(href)}" title="Invoice ${escapeHtml(invoice.invoiceNumber)}"></iframe>`
+        ? `<object class="invoice-media invoice-pdf" data="${escapeHtml(href)}" type="application/pdf"><a href="${escapeHtml(href)}">Open invoice PDF</a></object>`
         : href
-          ? `<img class="invoice-image" src="${escapeHtml(href)}" alt="Invoice ${escapeHtml(invoice.invoiceNumber)}" />`
+          ? `<img class="invoice-media invoice-image" src="${escapeHtml(href)}" alt="Invoice ${escapeHtml(invoice.invoiceNumber)}" />`
           : '<p>Invoice file missing.</p>'
       return {
         tableRow: `<tr><td>${escapeHtml(invoice.vendor)}</td><td>${escapeHtml(invoice.invoiceNumber)}</td><td>${escapeHtml(repairOwnerVehicleLabel(invoice.repair)).replace(/\n/g, '<br>')}</td><td>${escapeHtml(formatCurrency(invoice.cost))}</td></tr>`,
@@ -502,25 +502,52 @@ function DrivewiseAdminApp() {
         <head>
           <title>DriveWise statement invoices</title>
           <style>
-            body { color: #111827; font-family: Arial, sans-serif; margin: 24px; }
+            @page { margin: 0.35in; size: letter portrait; }
+            * { box-sizing: border-box; }
+            body { color: #111827; font-family: Arial, sans-serif; margin: 0; }
             h1 { font-size: 24px; margin: 0 0 16px; }
-            h2 { font-size: 18px; margin: 0 0 12px; }
+            h2 { font-size: 16px; line-height: 1.2; margin: 0 0 8px; }
             table { border-collapse: collapse; margin-bottom: 24px; width: 100%; }
             th, td { border-bottom: 1px solid #cbd5e1; padding: 8px; text-align: left; }
             th { color: #475569; font-size: 12px; text-transform: uppercase; }
-            .invoice-page { break-before: page; page-break-before: always; }
-            .invoice-frame { border: 0; height: 10in; width: 100%; }
-            .invoice-image { display: block; max-height: 10in; max-width: 100%; object-fit: contain; }
+            .statement-page { break-after: page; page-break-after: always; }
+            .invoice-page {
+              break-before: page;
+              height: 10.3in;
+              overflow: hidden;
+              page-break-before: always;
+              page-break-inside: avoid;
+            }
+            .invoice-media {
+              border: 0;
+              display: block;
+              height: 9.85in;
+              max-height: 9.85in;
+              max-width: 100%;
+              object-fit: contain;
+              object-position: top left;
+              width: 100%;
+            }
+            .invoice-image { object-fit: contain; }
+            .invoice-pdf { background: #fff; }
           </style>
         </head>
         <body>
-          <h1>Invoices Selected for Payment</h1>
-          <table>
-            <thead><tr><th>Vendor</th><th>Invoice #</th><th>Owner / Vehicle</th><th>Cost</th></tr></thead>
-            <tbody>${rows.map((row) => row.tableRow).join('')}</tbody>
-          </table>
+          <section class="statement-page">
+            <h1>Invoices Selected for Payment</h1>
+            <table>
+              <thead><tr><th>Vendor</th><th>Invoice #</th><th>Owner / Vehicle</th><th>Cost</th></tr></thead>
+              <tbody>${rows.map((row) => row.tableRow).join('')}</tbody>
+            </table>
+          </section>
           ${rows.map((row) => row.invoicePage).join('')}
-          <script>setTimeout(() => window.print(), 1200)</script>
+          <script>
+            const images = Array.from(document.images);
+            Promise.all(images.map((image) => image.complete ? true : new Promise((resolve) => {
+              image.onload = resolve;
+              image.onerror = resolve;
+            }))).finally(() => setTimeout(() => window.print(), 2200));
+          </script>
         </body>
       </html>`)
     printWindow.document.close()
