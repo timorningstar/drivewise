@@ -41,7 +41,9 @@ account, log out, and then sign in with the new temporary password.
 - `schedule` (shown as **Repairs only**): create and edit repair and shop supply
   records, upload files, and view records; cannot complete statements.
 - `accounting`: view records, check and complete statement invoices, upload a
-  missing invoice file, and create payment batches; cannot edit repair details.
+  missing invoice file, create payment batches, and delete unlocked repair or
+  shop supply records when an entry needs to be reentered; cannot edit repair
+  details.
 - `recovery`: reset the main full-admin account only.
 
 Admin sessions are random bearer tokens stored in browser session storage and
@@ -127,7 +129,8 @@ files are JPG, PNG, and PDF, with a 10 MB limit per uploaded file.
 - Completing a statement records who completed it and when.
 - A repair with any completed statement invoice becomes view-only and cannot be
   deleted.
-- Only a full admin can delete an unlocked vehicle repair or shop supply entry.
+- Full admins and accounting admins can delete an unlocked vehicle repair or
+  shop supply entry.
 - Statement lists can be printed alone or together with their invoice files.
 
 ## Security Model

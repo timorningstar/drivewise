@@ -568,6 +568,7 @@ function DrivewiseAdminApp() {
   const canManageDrivewiseAccounting = ['full', 'admin', 'accounting'].includes(data?.role)
   const canManageMainAccount = ['full', 'recovery'].includes(data?.role)
   const canManageRegularAdmins = data?.role === 'full'
+  const canDeleteUnlockedDrivewiseRecords = ['full', 'accounting'].includes(data?.role)
   const canViewDrivewiseRecords = data?.role !== 'recovery'
   const isRepairFormReadOnly = repairForm.id && repairHasCompletedStatement(repairForm)
   const matchingVehicleRepairs = repairs.filter((repair) =>
@@ -1525,8 +1526,14 @@ function DrivewiseAdminApp() {
                       ) : (
                         <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
                       )}
-                      {data.role === 'full' && !repairHasCompletedStatement(repair) && (
-                        <button className="text-action" onClick={() => deleteRepair(repair.id)} type="button">Delete</button>
+                      {canDeleteUnlockedDrivewiseRecords && !repairHasCompletedStatement(repair) && (
+                        <button
+                          className="text-action"
+                          onClick={() => deleteRepair(repair.id, { confirm: true })}
+                          type="button"
+                        >
+                          Delete
+                        </button>
                       )}
                     </div>
                     )}
@@ -1577,7 +1584,7 @@ function DrivewiseAdminApp() {
                       )}
                     </td>
                     <td>
-                      {!repairHasCompletedStatement(record) && (
+                      {canDeleteUnlockedDrivewiseRecords && !repairHasCompletedStatement(record) && (
                         <button
                           className="text-action"
                           onClick={() => deleteRepair(record.id, { confirm: true, label: 'shop supply invoice' })}
@@ -1586,6 +1593,7 @@ function DrivewiseAdminApp() {
                           Delete
                         </button>
                       )}
+                      {!canDeleteUnlockedDrivewiseRecords && !repairHasCompletedStatement(record) && 'View only'}
                       {repairHasCompletedStatement(record) && 'Locked'}
                     </td>
                   </tr>
