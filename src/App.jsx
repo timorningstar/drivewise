@@ -704,7 +704,7 @@ function DrivewiseAdminApp() {
   const canManageRegularAdmins = !data?.hubSession && data?.role === 'full'
   const canDeleteUnlockedDrivewiseRecords = ['full', 'accounting'].includes(data?.role) || data?.accessLevels?.includes('accounting')
   const canViewDrivewiseRecords = data?.role !== 'recovery'
-  const isRepairFormReadOnly = repairForm.id && repairIsReadOnly(repairForm)
+  const isRepairFormReadOnly = repairForm.id && (!canManageDrivewiseRepairs || repairIsReadOnly(repairForm))
   const matchingVehicleRepairs = repairs.filter((repair) =>
     repair.id !== repairForm.id &&
     repairForm.year &&
@@ -1016,7 +1016,7 @@ function DrivewiseAdminApp() {
       <section className="admin-shell drivewise-shell">
         {data.role === 'recovery' && canManageMainAccount && adminAccountPanel}
 
-        {canManageDrivewiseRepairs && activeView === 'entry' && (
+        {(canManageDrivewiseRepairs || (canViewDrivewiseRecords && repairForm.id)) && activeView === 'entry' && (
         <form
           className="panel admin-editor"
           onSubmit={isRepairFormReadOnly ? (event) => event.preventDefault() : saveRepair}
@@ -1032,10 +1032,10 @@ function DrivewiseAdminApp() {
             </div>
             <button
               className="secondary-action"
-              onClick={startNewRepair}
+              onClick={canManageDrivewiseRepairs ? startNewRepair : () => setActiveView('repairs')}
               type="button"
             >
-              {isRepairFormReadOnly ? 'New repair record' : 'Clear form'}
+              {!canManageDrivewiseRepairs ? 'Back to vehicle records' : isRepairFormReadOnly ? 'New repair record' : 'Clear form'}
             </button>
           </div>
 
@@ -1713,16 +1713,15 @@ function DrivewiseAdminApp() {
                       {repair.mechanic?.completedAt&&<strong> · Repair completed by {repair.mechanic.mechanicName}</strong>}
                       {repair.mechanic&&<details><summary>Mechanic updates and attachments</summary>{repair.mechanic.notes.map((entry,i)=><p key={i}>{entry.author}: {entry.body}</p>)}{repair.mechanic.files.map(file=><p key={file.id}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a></p>)}</details>}
                     </span>
-                    {canManageDrivewiseRepairs && (
                     <div>
-                      {!repair.historicalComplete&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
+                      {canManageDrivewiseRepairs&&!repair.historicalComplete&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
                       <button className="text-action" type="button" onClick={()=>revokeMechanicShare(repair.id)}>Revoke link</button></>}
-                      {repairIsReadOnly(repair) ? (
+                      {!canManageDrivewiseRepairs || repairIsReadOnly(repair) ? (
                         <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>
                       ) : (
                         <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
                       )}
-                      {canDeleteUnlockedDrivewiseRecords && !repairIsReadOnly(repair) && (
+                      {canManageDrivewiseRepairs && canDeleteUnlockedDrivewiseRecords && !repairIsReadOnly(repair) && (
                         <button
                           className="text-action"
                           onClick={() => deleteRepair(repair.id, { confirm: true })}
@@ -1732,7 +1731,6 @@ function DrivewiseAdminApp() {
                         </button>
                       )}
                     </div>
-                    )}
                   </div>
                 ))}
               </section>

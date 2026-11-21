@@ -112,3 +112,5 @@ The five workflow menus remain current: New Repair Record, New Shop Supplies, Ve
 New Repair Record and New Shop Supplies appear only for users with repair-entry permission (Full Admin, Repairs only, or Repairs and accounting). Accounting-only users see Vehicle Repair Records, Shop Supplies Records and Vendor Invoice View, with accounting actions available according to their permissions. Entry forms and backend checks retain the same restrictions. Refresh DriveWise after changing a Hub grant to load the current role.
 
 Tim reports T2 was changed to Accounting only in Hub; this supersedes the initial temporary combined grant recorded above. No grants were changed by this menu fix.
+
+Accounting users can select **Vehicle Repair Records → View** to open the read-only face sheet, needed repairs/work notes, and saved invoice links/previews. Mechanic notes/completion and uploaded attachments remain available on the repair list. Detail fields are disabled and repair creation, editing, sharing, and saving remain restricted to repair-entry roles. Accounting payment/invoice processing permissions remain unchanged.
