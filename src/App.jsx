@@ -1,10 +1,23 @@
-import { useState } from 'react'
+import MechanicPage from './MechanicPage'
+import { useEffect, useState } from 'react'
+import {onAuthStateChanged,signInWithCustomToken,signOut,setPersistence,browserSessionPersistence} from 'firebase/auth'
+import {auth} from './firebase'
+import {handleHubSso} from './hub-sso'
 import './App.css'
 
 const DRIVEWISE_APP_ID = 'drivewise'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const DRIVEWISE_TOKEN_KEY = 'drivewiseAdminToken'
 const HIDDEN_VENDOR_LIST_NAMES = new Set(['amazon - % todd lehman'])
+const VENDOR_NAME_OVERRIDES = new Map([
+  ['federated', 'Federated Auto'],
+  ['federated auto', 'Federated Auto'],
+])
+
+async function drivewiseFetch(url,options={}) {
+  if(options.headers?.Authorization?.split(' ')[1]?.split('.').length===3&&auth.currentUser){options={...options,headers:{...options.headers,Authorization:'Bearer '+await auth.currentUser.getIdToken()}};}
+  return fetch(url,options)
+}
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`
@@ -58,6 +71,11 @@ function isHiddenVendorListName(vendor) {
   return HIDDEN_VENDOR_LIST_NAMES.has(String(vendor || '').trim().toLowerCase())
 }
 
+function normalizeVendorName(vendor) {
+  const trimmed = String(vendor || '').trim()
+  return VENDOR_NAME_OVERRIDES.get(trimmed.toLowerCase()) || trimmed
+}
+
 function repairOwnerVehicleLabel(repair) {
   if (isShopSupplyRecord(repair)) return 'Shop Supplies'
   return `${repair.ownerName}\n${vehicleLabel(repair)}`
@@ -73,6 +91,8 @@ function compareText(a, b) {
 
 function DrivewiseAdminApp() {
   const [token, setToken] = useState('')
+  const [authReady,setAuthReady]=useState(false)
+  const [hubEntry,setHubEntry]=useState(()=>window.location.hash.startsWith('#dtm-'))
   const [login, setLogin] = useState({ username: '', password: '' })
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
@@ -85,6 +105,10 @@ function DrivewiseAdminApp() {
     password: '',
     accessLevel: 'admin',
   })
+  const [confirmedNewVendorKeys, setConfirmedNewVendorKeys] = useState(new Set())
+  const [pendingVendorPromptKeys, setPendingVendorPromptKeys] = useState(new Set())
+  const [touchedVendorKeys, setTouchedVendorKeys] = useState(new Set())
+  const [share,setShare]=useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -95,7 +119,7 @@ function DrivewiseAdminApp() {
   })
 
   const loadDrivewiseState = async (activeToken = token) => {
-    const response = await fetch(apiUrl(`/api/drivewise-state?app=${DRIVEWISE_APP_ID}`), {
+    const response = await drivewiseFetch(apiUrl(`/api/drivewise-state?app=${DRIVEWISE_APP_ID}`), {
       headers: authHeaders(activeToken),
       cache: 'no-store',
     })
@@ -103,18 +127,27 @@ function DrivewiseAdminApp() {
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || 'DriveWise admin session expired.')
     }
-    setData(payload)
+    setData(normalizeDrivewisePayload(payload))
     setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
     if (payload.role === 'accounting') setActiveView('invoices')
     if (payload.role === 'recovery') setActiveView('entry')
     setError('')
   }
 
+  useEffect(()=>{let unsubscribe;let active=true;
+    (async()=>{try{
+      if(await handleHubSso({app:'drivewise',signIn:async value=>{await setPersistence(auth,browserSessionPersistence);await signInWithCustomToken(auth,value)},logout:()=>signOut(auth)}))return;
+      unsubscribe=onAuthStateChanged(auth,async user=>{if(!active)return;if(!user){setAuthReady(true);return;}try{const value=await user.getIdToken();if(active){setToken(value);await loadDrivewiseState(value);}}catch(e){if(active)setError(e.message);}finally{if(active)setAuthReady(true);}});
+    }catch(e){if(active){setError(e.message);setAuthReady(true);}}})();return()=>{active=false;unsubscribe?.();};
+  // Auth initializes once; the state loader receives the fresh token explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   const handleLogin = async (event) => {
     event.preventDefault()
     setError('')
     try {
-      const response = await fetch(apiUrl(`/api/admin-login?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/admin-login?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify(login),
@@ -130,6 +163,9 @@ function DrivewiseAdminApp() {
     }
   }
 
+  const openMechanicShare=async repairId=>{setError('');try{const response=await drivewiseFetch(apiUrl('/api/drivewise-mechanic-share'),{method:'POST',headers:authHeaders(),body:JSON.stringify({repairId})});const result=await readJsonPayload(response);if(!response.ok)throw Error(result.error||'Could not create mechanic link.');setShare(result);}catch(e){setError(e.message)}}
+  const revokeMechanicShare=async repairId=>{if(!window.confirm('Revoke the current mechanic link for this repair?'))return;try{const response=await drivewiseFetch(apiUrl('/api/drivewise-mechanic-revoke'),{method:'POST',headers:authHeaders(),body:JSON.stringify({repairId})});if(!response.ok)throw Error('Could not revoke the link.');setMessage('Mechanic link revoked.')}catch(e){setError(e.message)}}
+
   const saveRepair = async (event) => {
     event.preventDefault()
     setError('')
@@ -138,17 +174,27 @@ function DrivewiseAdminApp() {
       setError('Choose whether this is the same vehicle or a different vehicle before saving.')
       return
     }
+    if ((repairForm.invoices || []).some((invoice) => String(invoice.vendor || '').trim().length === 1)) {
+      setError('Vendor names must be at least 2 characters.')
+      return
+    }
+    const unresolvedVendor = findUnresolvedVendorPrompt(repairForm)
+    if (unresolvedVendor) {
+      showVendorPrompt(unresolvedVendor.invoice, unresolvedVendor.likelyVendor)
+      setError(`Confirm whether ${unresolvedVendor.typed} is a new vendor or ${unresolvedVendor.likelyVendor}.`)
+      return
+    }
     try {
       const repairToSave = await prepareRepairForSave(repairForm)
       setRepairForm(repairToSave)
-      const response = await fetch(apiUrl(`/api/drivewise-repair?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/drivewise-repair?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ repair: repairToSave }),
       })
       const payload = await readJsonPayload(response)
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Repair could not be saved.')
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       if (repairForm.recordType === 'shopSupply') {
         setRepairForm(emptyShopSupplyRecord())
         setMessage('Shop supply invoice saved.')
@@ -156,7 +202,8 @@ function DrivewiseAdminApp() {
       } else {
         setRepairForm(emptyDrivewiseRepair())
         setMessage('DriveWise repair record saved.')
-        setActiveView('entry')
+        setActiveView('repairs')
+        if(!repairForm.id)await openMechanicShare(repairToSave.id)
       }
     } catch (saveError) {
       setError(saveError.message)
@@ -206,7 +253,7 @@ function DrivewiseAdminApp() {
   }
 
   const uploadPendingFile = async (body) => {
-    const response = await fetch(apiUrl(`/api/drivewise-file-upload?app=${DRIVEWISE_APP_ID}`), {
+    const response = await drivewiseFetch(apiUrl(`/api/drivewise-file-upload?app=${DRIVEWISE_APP_ID}`), {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(body),
@@ -222,14 +269,14 @@ function DrivewiseAdminApp() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch(apiUrl(`/api/drivewise-delete-repair?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/drivewise-delete-repair?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ id }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.ok) throw new Error(payload.error || `${label} could not be deleted.`)
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       setMessage(`${label.charAt(0).toUpperCase()}${label.slice(1)} deleted.`)
     } catch (deleteError) {
       setError(deleteError.message)
@@ -240,14 +287,14 @@ function DrivewiseAdminApp() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch(apiUrl(`/api/drivewise-invoice-status?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/drivewise-invoice-status?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ repairId, invoiceId: invoice.id, updates }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Invoice status could not be updated.')
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
     } catch (statusError) {
       setError(statusError.message)
     }
@@ -261,7 +308,7 @@ function DrivewiseAdminApp() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch(apiUrl(`/api/drivewise-complete-statement?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/drivewise-complete-statement?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
@@ -273,7 +320,7 @@ function DrivewiseAdminApp() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Statement invoices could not be completed.')
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       setMessage('Statement invoices marked complete.')
     } catch (completeError) {
       setError(completeError.message)
@@ -285,7 +332,7 @@ function DrivewiseAdminApp() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch(apiUrl(`/api/admin-main-account?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/admin-main-account?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(accountForm),
@@ -294,7 +341,7 @@ function DrivewiseAdminApp() {
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || 'Full-admin account could not be updated.')
       }
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
       setMessage('Full-admin account updated.')
     } catch (accountError) {
@@ -307,7 +354,7 @@ function DrivewiseAdminApp() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch(apiUrl(`/api/admin-regular-admins?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/admin-regular-admins?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(regularForm),
@@ -316,7 +363,7 @@ function DrivewiseAdminApp() {
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || 'Admin account could not be added.')
       }
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       setRegularForm({ username: '', password: '', accessLevel: 'admin' })
       setMessage('Admin account added.')
     } catch (regularError) {
@@ -328,7 +375,7 @@ function DrivewiseAdminApp() {
     setError('')
     setMessage('')
     try {
-      const response = await fetch(apiUrl(`/api/admin-delete-regular-admin?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/admin-delete-regular-admin?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ id }),
@@ -337,7 +384,7 @@ function DrivewiseAdminApp() {
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || 'Admin account could not be deleted.')
       }
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       setMessage('Admin account deleted.')
     } catch (deleteError) {
       setError(deleteError.message)
@@ -397,7 +444,7 @@ function DrivewiseAdminApp() {
     setMessage('')
     const dataUrl = await readFileAsDataUrl(file)
     try {
-      const response = await fetch(apiUrl(`/api/drivewise-invoice-file?app=${DRIVEWISE_APP_ID}`), {
+      const response = await drivewiseFetch(apiUrl(`/api/drivewise-invoice-file?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
@@ -410,7 +457,7 @@ function DrivewiseAdminApp() {
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Invoice file could not be saved.')
-      setData(payload)
+      setData(normalizeDrivewisePayload(payload))
       setMessage('Invoice file saved.')
     } catch (fileError) {
       setError(fileError.message)
@@ -425,12 +472,96 @@ function DrivewiseAdminApp() {
   }
 
   const updateInvoice = (index, updates) => {
+    const normalizedUpdates = 'vendor' in updates
+      ? { ...updates, vendor: normalizeVendorName(updates.vendor) }
+      : updates
+    if ('vendor' in updates) {
+      setPendingVendorPromptKeys((current) => {
+        const next = new Set([...current].filter((key) => !key.startsWith(`${repairForm.invoices[index]?.id}:`)))
+        return next
+      })
+      setTouchedVendorKeys((current) => {
+        const next = new Set([...current].filter((key) => !key.startsWith(`${repairForm.invoices[index]?.id}:`)))
+        return next
+      })
+    }
     setRepairForm((current) => ({
       ...current,
       invoices: current.invoices.map((invoice, invoiceIndex) =>
-        invoiceIndex === index ? { ...invoice, ...updates } : invoice,
+        invoiceIndex === index ? { ...invoice, ...normalizedUpdates } : invoice,
       ),
     }))
+  }
+
+  const vendorKey = (invoice, vendor) => `${invoice.id}:${String(vendor || '').trim().toLowerCase()}`
+
+  const likelyVendorForValue = (value) => {
+    const typed = String(value || '').trim().toLowerCase()
+    if (typed.length < 2) return ''
+    const candidates = vendors.filter((vendor) => {
+      const candidate = vendor.toLowerCase()
+      return candidate !== typed
+    })
+    return candidates.find((vendor) => vendor.toLowerCase().startsWith(typed)) ||
+      candidates.find((vendor) => vendor.toLowerCase().split(/[^a-z0-9]+/).some((part) => part.startsWith(typed))) ||
+      candidates.find((vendor) => vendor.toLowerCase().includes(typed)) ||
+      ''
+  }
+
+  const findUnresolvedVendorPrompt = (repair) => {
+    for (const invoice of repair.invoices || []) {
+      const likelyVendor = likelyVendorForValue(invoice.vendor)
+      if (likelyVendor && !confirmedNewVendorKeys.has(vendorKey(invoice, invoice.vendor))) {
+        return { invoice, typed: invoice.vendor, likelyVendor }
+      }
+    }
+    return null
+  }
+
+  const showVendorPrompt = (invoice, likelyVendor = likelyVendorForValue(invoice.vendor)) => {
+    markVendorTouched(invoice)
+    if (!likelyVendor || confirmedNewVendorKeys.has(vendorKey(invoice, invoice.vendor))) return
+    setPendingVendorPromptKeys((current) => {
+      const next = new Set(current)
+      next.add(vendorKey(invoice, invoice.vendor))
+      return next
+    })
+  }
+
+  const markVendorTouched = (invoice) => {
+    const vendor = String(invoice.vendor || '').trim()
+    if (!vendor) return
+    setTouchedVendorKeys((current) => {
+      const next = new Set(current)
+      next.add(vendorKey(invoice, invoice.vendor))
+      return next
+    })
+  }
+
+  const shouldShowVendorLengthError = (invoice) => {
+    const vendor = String(invoice.vendor || '').trim()
+    return vendor.length === 1 && touchedVendorKeys.has(vendorKey(invoice, invoice.vendor))
+  }
+
+  const shouldShowVendorPrompt = (invoice) => {
+    const likelyVendor = likelyVendorForValue(invoice.vendor)
+    return Boolean(
+      likelyVendor &&
+      pendingVendorPromptKeys.has(vendorKey(invoice, invoice.vendor)) &&
+      !confirmedNewVendorKeys.has(vendorKey(invoice, invoice.vendor)),
+    )
+  }
+
+  const acceptLikelyVendor = (index, likelyVendor) => {
+    updateInvoice(index, { vendor: likelyVendor })
+  }
+
+  const keepNewVendor = (invoice) => {
+    setConfirmedNewVendorKeys((current) => {
+      const next = new Set(current)
+      next.add(vendorKey(invoice, invoice.vendor))
+      return next
+    })
   }
 
   const removeInvoice = (index) => {
@@ -558,6 +689,7 @@ function DrivewiseAdminApp() {
   }
 
   const logout = () => {
+    if(data?.hubSession){window.location.assign('https://dtmapp.web.app');return;}
     sessionStorage.removeItem(DRIVEWISE_TOKEN_KEY)
     setToken('')
     setData(null)
@@ -566,9 +698,9 @@ function DrivewiseAdminApp() {
   const repairs = data?.repairs || []
   const canManageDrivewiseRepairs = ['full', 'admin', 'schedule'].includes(data?.role)
   const canManageDrivewiseAccounting = ['full', 'admin', 'accounting'].includes(data?.role)
-  const canManageMainAccount = ['full', 'recovery'].includes(data?.role)
-  const canManageRegularAdmins = data?.role === 'full'
-  const canDeleteUnlockedDrivewiseRecords = ['full', 'accounting'].includes(data?.role)
+  const canManageMainAccount = !data?.hubSession && ['full', 'recovery'].includes(data?.role)
+  const canManageRegularAdmins = !data?.hubSession && data?.role === 'full'
+  const canDeleteUnlockedDrivewiseRecords = ['full', 'accounting'].includes(data?.role) || data?.accessLevels?.includes('accounting')
   const canViewDrivewiseRecords = data?.role !== 'recovery'
   const isRepairFormReadOnly = repairForm.id && repairHasCompletedStatement(repairForm)
   const matchingVehicleRepairs = repairs.filter((repair) =>
@@ -759,6 +891,10 @@ function DrivewiseAdminApp() {
     </section>
   )
 
+  if(!authReady)return <main><section className="panel"><h1>DriveWise</h1><p role="status">Opening your DTM workspace...</p></section></main>
+
+  if(!data&&hubEntry)return <main><section className="panel"><h1>DriveWise</h1><p role="status">{error||'Opening your DTM workspace...'}</p><a href="https://dtmapp.web.app">Return to DTM Hub</a><button type="button" onClick={()=>setHubEntry(false)}>Use an existing DriveWise login</button></section></main>
+
   if (!data) {
     return (
       <main>
@@ -774,7 +910,7 @@ function DrivewiseAdminApp() {
           </div>
         </header>
         <section className="admin-shell single-panel">
-          <form className="panel admin-login-panel" onSubmit={handleLogin}>
+          <a className="primary-action" href="/#dtm-hub">Sign in through DTM Hub</a><form className="panel admin-login-panel" onSubmit={handleLogin}>
             <label>
               Login
               <input
@@ -806,6 +942,7 @@ function DrivewiseAdminApp() {
 
   return (
     <main>
+      {share&&<div className="mechanic-backdrop"><section role="dialog" aria-modal="true" aria-label="Share mechanic repair link" className="panel mechanic-share"><h2>Share mechanic repair link</h2><p>The mechanic can use this link for 30 days without signing in. Creating another link replaces the previous one.</p><label>Repair link<input readOnly value={share.url}/></label><div className="header-actions"><button type="button" onClick={()=>navigator.clipboard.writeText(share.url).then(()=>setMessage('Link copied.')).catch(()=>setMessage('Select and copy the repair link.'))}>Copy link</button><a href={'mailto:?subject='+encodeURIComponent('DTM vehicle repair')+'&body='+encodeURIComponent('Please review and complete this vehicle repair: '+share.url+'\nThis link expires in 30 days.')}>Email repair link</a><button type="button" onClick={()=>setShare(null)}>Close</button></div></section></div>}
       <header className="site-header admin-header">
         <img src={appUrl('downtown-ministries-logo.png')} alt="Downtown Ministries logo" />
         <div>
@@ -817,7 +954,7 @@ function DrivewiseAdminApp() {
               : 'Manage repair face sheets, invoice tracking, vendor statement checks, and invoice files.'}
           </p>
           <div className="header-actions">
-            <button className="secondary-action" onClick={logout} type="button">Log out</button>
+            <button className="secondary-action" onClick={logout} type="button">{data.hubSession?'Back to DTM Hub':'Log out'}</button>{data.hubSession&&data.role==='full'&&<a className="secondary-action" href="https://dtmapp.web.app">App Access in DTM Hub</a>}
           </div>
           {canViewDrivewiseRecords && (
             <nav className="top-menu">
@@ -1117,9 +1254,33 @@ function DrivewiseAdminApp() {
                     <input
                       disabled={isRepairFormReadOnly}
                       list={vendorDatalistId}
+                      onBlur={() => showVendorPrompt(invoice)}
                       onChange={(event) => updateInvoice(index, { vendor: event.target.value })}
                       value={invoice.vendor}
                     />
+                    {!isRepairFormReadOnly && shouldShowVendorPrompt(invoice) && (
+                        <span className="vendor-confirmation">
+                          <span>
+                            Is this a new vendor or is this {likelyVendorForValue(invoice.vendor)}?
+                          </span>
+                          <span className="vendor-confirmation-actions">
+                            <button
+                              onClick={() => acceptLikelyVendor(index, likelyVendorForValue(invoice.vendor))}
+                              type="button"
+                            >
+                              Use {likelyVendorForValue(invoice.vendor)}
+                            </button>
+                            <button onClick={() => keepNewVendor(invoice)} type="button">
+                              New vendor
+                            </button>
+                          </span>
+                        </span>
+                    )}
+                    {!isRepairFormReadOnly && shouldShowVendorLengthError(invoice) && (
+                      <span className="vendor-field-error">
+                        Vendor names must be at least 2 characters.
+                      </span>
+                    )}
                   </label>
                   <label>
                     Invoice #
@@ -1149,13 +1310,13 @@ function DrivewiseAdminApp() {
                   </label>
                   {!isRepairFormReadOnly && (
                     <label className="camera-upload-label">
-                      Invoice image or PDF *
+                      Invoice image or PDF
                       <input
                         accept="image/jpeg,image/png,application/pdf"
                         capture="environment"
                         className="camera-upload-input"
                         onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
-                        required={!invoice.invoiceFile && !invoice.fileData}
+                        required={repairForm.recordType==='shopSupply' && !invoice.invoiceFile && !invoice.fileData}
                         type="file"
                       />
                       <span className="camera-upload-button">
@@ -1261,9 +1422,33 @@ function DrivewiseAdminApp() {
                     Vendor
                     <input
                       list={vendorDatalistId}
+                      onBlur={() => showVendorPrompt(invoice)}
                       onChange={(event) => updateInvoice(index, { vendor: event.target.value })}
                       value={invoice.vendor}
                     />
+                    {shouldShowVendorPrompt(invoice) && (
+                        <span className="vendor-confirmation">
+                          <span>
+                            Is this a new vendor or is this {likelyVendorForValue(invoice.vendor)}?
+                          </span>
+                          <span className="vendor-confirmation-actions">
+                            <button
+                              onClick={() => acceptLikelyVendor(index, likelyVendorForValue(invoice.vendor))}
+                              type="button"
+                            >
+                              Use {likelyVendorForValue(invoice.vendor)}
+                            </button>
+                            <button onClick={() => keepNewVendor(invoice)} type="button">
+                              New vendor
+                            </button>
+                          </span>
+                        </span>
+                    )}
+                    {shouldShowVendorLengthError(invoice) && (
+                      <span className="vendor-field-error">
+                        Vendor names must be at least 2 characters.
+                      </span>
+                    )}
                   </label>
                   <label>
                     Invoice #
@@ -1289,13 +1474,13 @@ function DrivewiseAdminApp() {
                     />
                   </label>
                   <label className="camera-upload-label">
-                    Invoice image or PDF *
+                    Invoice image or PDF
                     <input
                       accept="image/jpeg,image/png,application/pdf"
                       capture="environment"
                       className="camera-upload-input"
                       onChange={(event) => handleInvoiceFile(index, event.target.files?.[0])}
-                      required={!invoice.invoiceFile && !invoice.fileData}
+                      required={repairForm.recordType==='shopSupply' && !invoice.invoiceFile && !invoice.fileData}
                       type="file"
                     />
                     <span className="camera-upload-button">
@@ -1518,9 +1703,13 @@ function DrivewiseAdminApp() {
                       {vehicleLabel(repair)}
                       {repair.payer ? ` - Payer: ${repair.payer}` : ''}
                       {repairHasCompletedStatement(repair) ? ' - Statement complete' : ''}
+                      {repair.mechanic?.completedAt&&<strong> · Repair completed by {repair.mechanic.mechanicName}</strong>}
+                      {repair.mechanic&&<details><summary>Mechanic updates and attachments</summary>{repair.mechanic.notes.map((entry,i)=><p key={i}>{entry.author}: {entry.body}</p>)}{repair.mechanic.files.map(file=><p key={file.id}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a></p>)}</details>}
                     </span>
                     {canManageDrivewiseRepairs && (
                     <div>
+                      <button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
+                      <button className="text-action" type="button" onClick={()=>revokeMechanicShare(repair.id)}>Revoke link</button>
                       {repairHasCompletedStatement(repair) ? (
                         <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>
                       ) : (
@@ -1664,6 +1853,24 @@ function emptyDrivewiseInvoice() {
   }
 }
 
+function normalizeDrivewisePayload(payload) {
+  if (!payload || !Array.isArray(payload.repairs)) return payload
+  return {
+    ...payload,
+    repairs: payload.repairs.map((repair) => ({
+      ...repair,
+      invoices: (repair.invoices || []).map((invoice) => ({
+        ...invoice,
+        vendor: normalizeVendorName(invoice.vendor),
+      })),
+    })),
+    paymentBatches: (payload.paymentBatches || []).map((batch) => ({
+      ...batch,
+      vendor: normalizeVendorName(batch.vendor),
+    })),
+  }
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -1736,7 +1943,8 @@ function adminRoleLabel(accessLevel) {
 }
 
 function App() {
-  return <DrivewiseAdminApp />
+  const [mechanicToken]=useState(()=>{const params=new URLSearchParams(window.location.hash.slice(1));const token=params.get('mechanic');if(token){sessionStorage.setItem('drivewise-mechanic-link',token);window.history.replaceState(null,'',window.location.pathname+'#mechanic');return token;}return window.location.hash==='#mechanic'?sessionStorage.getItem('drivewise-mechanic-link'):null;});
+  return mechanicToken?<MechanicPage token={mechanicToken}/>:<DrivewiseAdminApp />
 }
 
 export default App

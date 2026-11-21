@@ -250,3 +250,12 @@ npx firebase-tools functions:log --project dtmcleaners
   `statementComplete: true`; this intentionally locks the whole record.
 - Bad release: correct or revert the source through Git, run the checks above,
   and redeploy. Do not overwrite or delete Firestore data to roll back code.
+
+
+## November 21 Hub and mechanic upgrade
+
+The README upgrade section supersedes older statements that DriveWise does not use Firebase Authentication: Hub sessions now use the existing dtm-housing identity while operational data and legacy accounts remain in dtmcleaners. A dedicated Hub access grant is required. The backend checks each Hub JWT against the protected shared access endpoint and fails closed. Legacy opaque sessions remain supported. Public raw-state access is no longer supported.
+
+Mechanic work/link documents are separate from the historical state blob; reads merge their display fields into authenticated staff responses. All mechanic changes validate a current hashed capability and expiry inside the Firestore transaction. Invoice uploads are private and signed download links are short-lived. The mechanic projection excludes accounting, payments and other repair records. No production test records or tokens belong in source or guides.
+
+Preserve appState/drivewise, drivewiseMechanicWork, drivewiseMechanicLinks and drivewiseInvoices object bytes in future recovery processes. Existing daily-use legacy logins are not automatically converted or disabled.

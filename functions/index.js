@@ -1,3 +1,5 @@
+const {createMechanicService} = require("./mechanic");
+const {hubSession} = require("./hub-access");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const {onRequest} = require("firebase-functions/v2/https");
@@ -16,6 +18,17 @@ const storageBucketNames = [
 ].filter(Boolean);
 const APP_ID = "drivewise";
 const adminSessionCollection = db.collection("adminSessions");
+const mechanicWork=db.collection('drivewiseMechanicWork');
+const mechanicLinks=db.collection('drivewiseMechanicLinks');
+const mechanic=createMechanicService({
+ repo:{link:async key=>(await mechanicLinks.doc(key).get()).data(),work:async id=>(await mechanicWork.doc(id).get()).data(),putLink:(key,value)=>mechanicLinks.doc(key).create(value),mutate:(id,change)=>db.runTransaction(async tx=>{const ref=mechanicWork.doc(id),snapshot=await tx.get(ref),next=change(snapshot.data()||{});tx.set(ref,next);return next;})},
+ readRepair:async id=>(await readState()).repairs.find(r=>r.id===id),
+ saveFile:async(id,file)=>{const path=`drivewiseInvoices/${id}/mechanic-${file.id}`;const bucket=await saveInvoiceBufferToStorage(path,file.bytes,file.type);return {id:file.id,name:file.name,type:file.type,path,bucket};},
+ signFile:async(file,expires)=>{const [url]=await storage.bucket(file.bucket).file(file.path).getSignedUrl({action:'read',expires});return url;},
+ removeFile:file=>storage.bucket(file.bucket).file(file.path).delete(),
+});
+async function mechanicProgress(){const snapshot=await mechanicWork.get();const result=new Map();for(const row of snapshot.docs){const value=row.data();result.set(row.id,{sharedAt:value.sharedAt||'',completedAt:value.completedAt||'',mechanicName:value.mechanicName||'',notes:value.notes||[],files:await Promise.all((value.files||[]).map(async file=>({id:file.id,name:file.name,url:await signedStorageUrl(file.path,file.bucket)})))});}return result;}
+
 
 function defaultState() {
   return {
@@ -66,8 +79,13 @@ function normalizeState(input) {
   return {
     ...defaultState(),
     ...source,
-    repairs: Array.isArray(source.repairs) ? source.repairs : [],
-    paymentBatches: Array.isArray(source.paymentBatches) ? source.paymentBatches : [],
+    repairs: Array.isArray(source.repairs) ? source.repairs.map(normalizeDrivewiseRepairVendors) : [],
+    paymentBatches: Array.isArray(source.paymentBatches)
+      ? source.paymentBatches.map((batch) => ({
+        ...batch,
+        vendor: normalizeVendorName(batch.vendor),
+      }))
+      : [],
     adminLog: Array.isArray(source.adminLog) ? source.adminLog : [],
     adminCredentials: normalizeCredentialRecord(source.adminCredentials || defaultState().adminCredentials),
     recoveryAdminCredentials: normalizeCredentialRecord(source.recoveryAdminCredentials || defaultState().recoveryAdminCredentials),
@@ -154,6 +172,11 @@ async function requireAdmin(request, allowedRoles) {
     throw error;
   }
 
+  if(token.split(".").length===3){
+    const session=await hubSession(token,allowedRoles);
+    if(routePath(request).startsWith("/admin-") || routePath(request)==="/drivewise-purge"){const error=new Error("Manage shared app access in DTM Hub.");error.statusCode=403;throw error;}
+    return session;
+  }
   const tokenHash = hashToken(token);
   const sessionDoc = await adminSessionCollection.doc(tokenHash).get();
   if (!sessionDoc.exists) {
@@ -189,9 +212,12 @@ async function requireAdmin(request, allowedRoles) {
 
 async function drivewiseState(session) {
   const state = await readState();
+  const progress=await mechanicProgress();
   return {
     ok: true,
     role: session.role,
+    hubSession: Boolean(session.hub),
+    accessLevels: session.roles || [session.role],
     username: session.username,
     title: "Downtown Ministries DriveWise",
     mainAdminUsername: state.adminCredentials?.username || "admin",
@@ -203,7 +229,7 @@ async function drivewiseState(session) {
         createdAt: adminRecord.createdAt || "",
       }))
       : [],
-    repairs: session.role === "recovery" ? [] : await enrichDrivewiseRepairs(state.repairs || []),
+    repairs: session.role === "recovery" ? [] : await enrichDrivewiseRepairs((state.repairs || []).map(repair=>({...repair,mechanic:progress.get(repair.id)}))),
     paymentBatches: session.role === "recovery" ? [] : state.paymentBatches || [],
     adminLog: state.adminLog || [],
   };
@@ -321,7 +347,11 @@ async function saveDrivewiseRepair(request, session) {
   if (repair.recordType === "shopSupply" && !repair.repairDate) {
     return {ok: false, error: "Supply date is required."};
   }
-  if (!(repair.invoices || []).length || repair.invoices.some((invoice) => !invoice.invoiceFile && !invoice.fileData)) {
+  if ((repair.invoices || []).some((invoice) => clean(invoice.vendor).length === 1)) {
+    return {ok: false, error: "Vendor names must be at least 2 characters."};
+  }
+  repair.invoices=repair.invoices.filter(invoice=>invoice.vendor||invoice.invoiceNumber||invoice.partDescription||invoice.cost||invoice.invoiceFile||invoice.fileData);
+  if ((repair.recordType === "shopSupply" && !repair.invoices.length) || repair.invoices.some((invoice) => !invoice.invoiceFile && !invoice.fileData)) {
     return {ok: false, error: "Upload an invoice image or PDF for each invoice."};
   }
   const existingIndex = (state.repairs || []).findIndex((item) => item.id === repair.id);
@@ -554,7 +584,7 @@ async function downloadDrivewiseInvoiceFile(request, response) {
 }
 
 async function createDrivewisePaymentBatch(request, session) {
-  const vendor = clean(request.body?.vendor);
+  const vendor = normalizeVendorName(request.body?.vendor);
   if (!vendor) return {ok: false, error: "Choose a vendor to create a payment batch."};
   const state = await readState();
   const batchId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -636,7 +666,7 @@ function sanitizeDrivewiseRepair(input) {
     } : null,
     invoices: invoices.map((invoice) => ({
       id: clean(invoice.id) || globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      vendor: clean(invoice.vendor),
+      vendor: normalizeVendorName(invoice.vendor),
       invoiceNumber: clean(invoice.invoiceNumber),
       partDescription: clean(invoice.partDescription),
       cost: Number.parseFloat(invoice.cost) || 0,
@@ -800,10 +830,26 @@ function routePath(request) {
 exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request, response) => {
   try {
     const path = routePath(request);
+    if(request.method==='POST'&&['/mechanic/view','/mechanic/update','/mechanic/upload'].includes(path)){
+      if(request.get('origin')!=='https://drivewise.web.app'){sendJson(response,403,{error:'Open the mechanic link directly.'});return;}
+      const data=request.body||{};const result=path==='/mechanic/view'?await mechanic.view(data.token):path==='/mechanic/update'?await mechanic.update(data.token,data):await mechanic.upload(data.token,data);sendJson(response,200,result);return;
+    }
+    if(request.method==='POST'&&['/drivewise-mechanic-share','/drivewise-mechanic-revoke'].includes(path)){
+      const session=await requireAdmin(request,['full','admin','schedule']);
+      const id=clean(request.body?.repairId);if(!/^[a-zA-Z0-9_-]{1,120}$/.test(id)){sendJson(response,400,{error:'Choose a vehicle repair.'});return;}
+      const result=path.endsWith('-share')?await mechanic.issue(id,session.username):await mechanic.revoke(id);sendJson(response,200,result);return;
+    }
 
-    if (request.method === "GET" && (path === "/state" || path === "/")) {
-      sendJson(response, 200, {state: await readState(), app: APP_ID});
-      return;
+
+    if(request.method==="POST"&&path==="/dtm-access/hub/redeem"){
+      if(request.get("origin")!=="https://drivewise.web.app"){sendJson(response,403,{error:"Open DriveWise from DTM Hub."});return;}
+      const result=await fetch("https://dtmapp.web.app/api/dtm-access/hub/redeem",{method:"POST",headers:{"Content-Type":"application/json",Origin:"https://drivewise.web.app"},body:JSON.stringify({...request.body,app:"drivewise"}),signal:AbortSignal.timeout(15000)});
+      sendJson(response,result.status,await result.json());return;
+    }
+    if(request.method==="GET"&&path==="/"){sendJson(response,200,{app:APP_ID,ok:true});return;}
+    if(request.method==="GET"&&path==="/state"){
+      const session=await requireAdmin(request,["full","admin","schedule","accounting","recovery"]);
+      sendJson(response,200,await drivewiseState(session));return;
     }
 
     if (request.method === "POST" && path === "/admin-login") {
@@ -915,8 +961,27 @@ function clean(value) {
   return String(value || "").trim();
 }
 
+function normalizeVendorName(value) {
+  const vendor = clean(value);
+  const normalized = vendor.toLowerCase();
+  if (normalized === "federated" || normalized === "federated auto") return "Federated Auto";
+  return vendor;
+}
+
 function normalizeEmail(value) {
   return clean(value).toLowerCase();
+}
+
+function normalizeDrivewiseRepairVendors(repair) {
+  return {
+    ...(repair || {}),
+    invoices: Array.isArray(repair?.invoices)
+      ? repair.invoices.map((invoice) => ({
+        ...invoice,
+        vendor: normalizeVendorName(invoice.vendor),
+      }))
+      : [],
+  };
 }
 
 function normalizeAdminLogin(value) {

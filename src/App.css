@@ -731,6 +731,46 @@ dd {
   padding: 16px;
 }
 
+.vendor-confirmation {
+  background: #fff7e8;
+  border: 1px solid #d79a28;
+  border-radius: 8px;
+  color: #5b3b00;
+  display: grid;
+  font-size: 0.9rem;
+  gap: 10px;
+  line-height: 1.35;
+  margin-top: 8px;
+  padding: 10px;
+}
+
+.vendor-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vendor-confirmation-actions button {
+  background: #ffffff;
+  border: 1px solid #d79a28;
+  color: #5b3b00;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.vendor-confirmation-actions button:hover {
+  background: #fbeac8;
+  border-color: #ad760f;
+}
+
+.vendor-field-error {
+  color: #b3261e;
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin-top: 7px;
+}
+
 .statement-print-list {
   border: 1px solid #d7dee6;
   border-radius: 8px;
@@ -851,3 +891,5 @@ dd {
     color: #000;
   }
 }
+
+.mechanic-page{max-width:800px;margin:25px auto;padding:0 15px}.mechanic-page label{display:block;margin:16px 0}.mechanic-page input:not([type=file]),.mechanic-page textarea{display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:6px}.repair-description{white-space:pre-wrap}.mechanic-backdrop{position:fixed;inset:0;z-index:1000;background:#142f4477;display:grid;place-items:center;padding:20px}.mechanic-share{max-width:650px;width:100%;max-height:90vh;overflow:auto}.mechanic-share input{width:100%;box-sizing:border-box;padding:10px}.mechanic-page article{border-top:1px solid #ddd;padding:12px 0}
