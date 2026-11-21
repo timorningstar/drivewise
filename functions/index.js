@@ -1,3 +1,4 @@
+const {assertRepairEditable} = require("./repair-status");
 const {createMechanicService} = require("./mechanic");
 const {hubSession} = require("./hub-access");
 const admin = require("firebase-admin");
@@ -333,6 +334,7 @@ async function deleteRegularAdmin(request, session) {
 async function saveDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = sanitizeDrivewiseRepair(request.body?.repair || {});
+  assertRepairEditable((state.repairs || []).find(item=>item.id===repair.id));
   if (repair.recordType === "shopSupply") {
     repair.ownerName = "Shop Supplies";
     repair.vehicleInfo = "Shop Supplies";
@@ -394,6 +396,7 @@ async function deleteDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = (state.repairs || []).find((item) => item.id === repairId);
   if (!repair) return {ok: false, error: "Repair record was not found."};
+  assertRepairEditable(repair);
   if (repairHasCompletedStatement(repair)) {
     return {ok: false, error: "This repair record has completed statement invoices and cannot be deleted."};
   }

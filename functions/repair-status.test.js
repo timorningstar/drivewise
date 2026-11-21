@@ -1,0 +1,2 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {assertRepairEditable}=require('./repair-status');
+test('completed historical repairs reject edits/deletion while new repair records remain editable',()=>{assert.throws(()=>assertRepairEditable({id:'old',historicalComplete:true}),{statusCode:409});assert.doesNotThrow(()=>assertRepairEditable({id:'new'}));assert.doesNotThrow(()=>assertRepairEditable(undefined));});
