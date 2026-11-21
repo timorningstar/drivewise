@@ -114,3 +114,5 @@ New Repair Record and New Shop Supplies appear only for users with repair-entry 
 Tim reports T2 was changed to Accounting only in Hub; this supersedes the initial temporary combined grant recorded above. No grants were changed by this menu fix.
 
 Accounting users can select **Vehicle Repair Records → View** to open the read-only face sheet, needed repairs/work notes, and saved invoice links/previews. Mechanic notes/completion and uploaded attachments remain available on the repair list. Detail fields are disabled and repair creation, editing, sharing, and saving remain restricted to repair-entry roles. Accounting payment/invoice processing permissions remain unchanged.
+
+Shop Supplies Records has independent Vendor and Statement filters, defaulting to All vendors / Unchecked. Statement options are All invoices, Unchecked, Selected for payment (checked but not completed), and Statement complete. Vendor choices include only shop-supply vendors. Filters apply to individual invoices, preserve date ordering, and show an explicit empty message. Regular invoice-view filters and payment processing remain unchanged.

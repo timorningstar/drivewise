@@ -100,6 +100,7 @@ function DrivewiseAdminApp() {
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
   const [activeView, setActiveView] = useState('entry')
   const [filters, setFilters] = useState({ vendor: 'all', statement: 'unchecked' })
+  const [supplyFilters, setSupplyFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [repairView, setRepairView] = useState('vehicle')
   const [accountForm, setAccountForm] = useState({ username: '', password: '' })
   const [regularForm, setRegularForm] = useState({
@@ -796,6 +797,19 @@ function DrivewiseAdminApp() {
   const shopSupplyRecords = repairs
     .filter(isShopSupplyRecord)
     .sort((a, b) => (b.repairDate || '').localeCompare(a.repairDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
+  const supplyVendors = [...new Set(shopSupplyRecords.flatMap((record) =>
+    (record.invoices || []).map((invoice) => invoice.vendor).filter(Boolean),
+  ))].sort((a, b) => a.localeCompare(b))
+  const filteredSupplyInvoices = shopSupplyRecords.flatMap((record) =>
+    (record.invoices || []).map((invoice) => ({ record, invoice })),
+  ).filter(({ invoice }) => {
+    const vendorMatches = supplyFilters.vendor === 'all' || invoice.vendor === supplyFilters.vendor
+    const statementMatches = supplyFilters.statement === 'all' ||
+      (supplyFilters.statement === 'unchecked' && !invoice.statementComplete && !invoice.statementChecked) ||
+      (supplyFilters.statement === 'checked' && !invoice.statementComplete && invoice.statementChecked) ||
+      (supplyFilters.statement === 'complete' && invoice.statementComplete)
+    return vendorMatches && statementMatches
+  })
   const adminAccountPanel = (
     <section className="panel admin-account-panel">
       <div className="section-heading">
@@ -1747,6 +1761,24 @@ function DrivewiseAdminApp() {
               <h2>Shop Supplies Records</h2>
             </div>
           </div>
+          <div className="schedule-filters no-print">
+            <label>
+              Vendor
+              <select value={supplyFilters.vendor} onChange={(event) => setSupplyFilters((current) => ({ ...current, vendor: event.target.value }))}>
+                <option value="all">All vendors</option>
+                {supplyVendors.map((vendor) => <option key={vendor}>{vendor}</option>)}
+              </select>
+            </label>
+            <label>
+              Statement
+              <select value={supplyFilters.statement} onChange={(event) => setSupplyFilters((current) => ({ ...current, statement: event.target.value }))}>
+                <option value="all">All invoices</option>
+                <option value="unchecked">Unchecked</option>
+                <option value="checked">Selected for payment</option>
+                <option value="complete">Statement complete</option>
+              </select>
+            </label>
+          </div>
           <table className="schedule-table drivewise-table">
             <thead>
               <tr>
@@ -1760,8 +1792,7 @@ function DrivewiseAdminApp() {
               </tr>
             </thead>
             <tbody>
-              {shopSupplyRecords.flatMap((record) =>
-                (record.invoices || []).map((invoice) => (
+              {filteredSupplyInvoices.map(({ record, invoice }) => (
                   <tr key={`${record.id}-${invoice.id}`}>
                     <td>{formatRepairDate(record.repairDate)}</td>
                     <td>{invoice.vendor}</td>
@@ -1791,7 +1822,9 @@ function DrivewiseAdminApp() {
                       {repairHasCompletedStatement(record) && 'Locked'}
                     </td>
                   </tr>
-                )),
+              ))}
+              {filteredSupplyInvoices.length === 0 && (
+                <tr><td colSpan="7">No shop supply invoices match these filters.</td></tr>
               )}
             </tbody>
           </table>
