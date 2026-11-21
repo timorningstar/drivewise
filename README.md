@@ -106,3 +106,9 @@ The owner confirmed all original vehicle repairs were already complete. Marked t
 Historical completed repairs display Repair complete and View, with no Share/Revoke/Edit/Delete actions. Backend edit/delete and mechanic-link issuance/access are blocked as well. This does not mark invoices paid, finish vendor statements, or close future repair requests. A readback check confirmed all original record content and other state sections unchanged apart from the explicit completion metadata; a protected pre-change recovery copy was verified.
 
 The five workflow menus remain current: New Repair Record, New Shop Supplies, Vehicle Repair Records, Shop Supplies Records and Vendor Invoice View. The legacy Admin menu is hidden for Hub sessions, which use App Access in DTM Hub; it remains available for authorized legacy account maintenance.
+
+## Permission-based menu visibility — November 21, 2026
+
+New Repair Record and New Shop Supplies appear only for users with repair-entry permission (Full Admin, Repairs only, or Repairs and accounting). Accounting-only users see Vehicle Repair Records, Shop Supplies Records and Vendor Invoice View, with accounting actions available according to their permissions. Entry forms and backend checks retain the same restrictions. Refresh DriveWise after changing a Hub grant to load the current role.
+
+Tim reports T2 was changed to Accounting only in Hub; this supersedes the initial temporary combined grant recorded above. No grants were changed by this menu fix.

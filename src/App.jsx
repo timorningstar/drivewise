@@ -960,20 +960,24 @@ function DrivewiseAdminApp() {
           </div>
           {canViewDrivewiseRecords && (
             <nav className="top-menu">
-              <button
-                className={activeView === 'entry' ? 'active' : ''}
-                onClick={startNewRepair}
-                type="button"
-              >
-                New Repair Record
-              </button>
-              <button
-                className={activeView === 'supplies' ? 'active' : ''}
-                onClick={startShopSupplies}
-                type="button"
-              >
-                New Shop Supplies
-              </button>
+              {canManageDrivewiseRepairs && (
+                <>
+                  <button
+                    className={activeView === 'entry' ? 'active' : ''}
+                    onClick={startNewRepair}
+                    type="button"
+                  >
+                    New Repair Record
+                  </button>
+                  <button
+                    className={activeView === 'supplies' ? 'active' : ''}
+                    onClick={startShopSupplies}
+                    type="button"
+                  >
+                    New Shop Supplies
+                  </button>
+                </>
+              )}
               <button
                 className={activeView === 'repairs' ? 'active' : ''}
                 onClick={() => setActiveView('repairs')}
