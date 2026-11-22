@@ -893,3 +893,57 @@ dd {
 }
 
 .mechanic-page{max-width:800px;margin:25px auto;padding:0 15px}.mechanic-page label{display:block;margin:16px 0}.mechanic-page input:not([type=file]),.mechanic-page textarea{display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:6px}.repair-description{white-space:pre-wrap}.mechanic-backdrop{position:fixed;inset:0;z-index:1000;background:#142f4477;display:grid;place-items:center;padding:20px}.mechanic-share{max-width:650px;width:100%;max-height:90vh;overflow:auto}.mechanic-share input{width:100%;box-sizing:border-box;padding:10px}.mechanic-page article{border-top:1px solid #ddd;padding:12px 0}
+
+/* Match the DTM Work Orders shell while retaining DriveWise forms and access. */
+.drivewise-workspace { background:#f1f5f8; color:#172c42; font-family:"Segoe UI",sans-serif; font-size:15px; }
+.dw-shell { max-width:1120px; margin:auto; padding:0 28px; }
+.dw-mast { background:#142f4b; color:#fff; border-bottom:3px solid #d2a95e; }
+.dw-mast-inner { min-height:72px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
+.dw-brand,.dw-account { display:flex; align-items:center; gap:14px; }
+.dw-brand strong,.dw-brand small { display:block; }
+.dw-brand strong { font-size:15px; font-weight:700; }
+.dw-brand small { font-size:13px; color:#c7d6e4; margin-top:3px; }
+.dw-brand a,.dw-access-link { color:inherit; }
+.dw-brand-mark { width:39px; height:39px; border:1px solid #8d784f; border-radius:8px; display:grid; place-items:center; color:#f2d297; flex-shrink:0; }
+.dw-account { font-size:14px; }
+.dw-back { background:transparent; color:#fff; border:1px solid #6e8399; border-radius:7px; padding:10px 14px; font-weight:650; cursor:pointer; }
+.dw-back:hover { background:#21496f; }
+.dw-access-link { font-size:13px; }
+.dw-intro { padding-top:38px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+.dw-intro h1 { color:#142f4b; font-size:clamp(32px,5vw,46px); letter-spacing:-.035em; line-height:1.1; }
+.dw-intro p { margin:10px 0 0; color:#55687c; line-height:1.5; }
+.dw-intro:last-child { padding-bottom:28px; }
+.drivewise-workspace .primary-action { background:#142f4b; border-color:#142f4b; color:white; font-size:14px; border-radius:7px; font-weight:650; }
+.drivewise-workspace .primary-action:hover { background:#21496f; }
+.drivewise-workspace .dw-new { width:auto; flex-shrink:0; padding:12px 16px; white-space:nowrap; }
+.dw-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:30px 0; }
+.dw-stat { background:#fff; border:1px solid #dbe3eb; border-radius:10px; padding:17px 20px; min-height:96px; text-align:left; color:#172c42; cursor:pointer; }
+.dw-stat:hover { border-color:#7993ae; }
+.dw-stat small { display:block; color:#55687c; font-size:14px; font-weight:650; }
+.dw-stat strong { display:block; font-size:clamp(22px,3vw,28px); line-height:1.25; margin-top:4px; overflow-wrap:anywhere; }
+.dw-tabs { display:flex; gap:4px; overflow-x:auto; border-bottom:1px solid #dbe3eb; margin:0 0 18px; }
+.dw-tabs button { background:none; border:0; border-bottom:3px solid transparent; border-radius:0; padding:12px 13px; white-space:nowrap; color:#55687c; font-size:14px; font-weight:650; cursor:pointer; }
+.dw-tabs button[aria-current=page] { border-bottom-color:#bc8b36; color:#142f4b; }
+.dw-tabs button:hover { color:#142f4b; background:#e9f0f5; }
+.drivewise-workspace .admin-shell { background:transparent; border:0; max-width:1120px; margin:auto; padding:0 28px 60px; }
+.drivewise-workspace .panel { border-color:#dbe3eb; border-radius:10px; padding:20px; overflow-x:auto; }
+.drivewise-workspace h2 { color:#172c42; font-size:23px; letter-spacing:-.02em; line-height:1.2; }
+.drivewise-workspace .eyebrow { color:#55687c; }
+.drivewise-workspace .section-heading { margin-bottom:18px; }
+.drivewise-workspace :focus-visible { outline:3px solid #2362a1; outline-offset:2px; }
+.dw-empty { padding:30px 12px; text-align:center; color:#55687c; }
+@media(max-width:700px) {
+  .dw-shell { padding-left:15px; padding-right:15px; }
+  .dw-mast-inner { min-height:66px; gap:10px; }
+  .dw-brand,.dw-account { gap:9px; }
+  .dw-account span,.dw-access-link { display:none; }
+  .dw-brand strong { font-size:13px; }
+  .dw-brand small { font-size:11px; }
+  .dw-back { padding:9px; font-size:12px; }
+  .dw-intro { padding-top:28px; align-items:flex-start; gap:12px; }
+  .dw-new { padding:11px; }
+  .dw-stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:24px 0; }
+  .dw-stat { padding:13px; min-height:85px; }
+  .drivewise-workspace .admin-shell { padding:0 15px 40px; }
+}
+@media print { .dw-dashboard-header { display:none!important; } }

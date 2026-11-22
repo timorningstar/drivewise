@@ -2,6 +2,7 @@ const {assertRepairEditable} = require("./repair-status");
 const {createMechanicService} = require("./mechanic");
 const {hubSession} = require("./hub-access");
 const {customerWorkflow} = require('./customer-workflow');
+const {cents:customerCents} = require('./customer-account');
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const admin = require("firebase-admin");
 const crypto = require("crypto");
@@ -355,6 +356,9 @@ async function saveDrivewiseRepair(request, session) {
   if (repair.recordType === "shopSupply" && !repair.repairDate) {
     return {ok: false, error: "Supply date is required."};
   }
+  if(repair.recordType!=="shopSupply"&&!repair.payer)return {ok:false,error:'Payer is required.'};
+  const initialCharge=request.body?.repair?.agreedCharge;
+  if(repair.recordType!=="shopSupply"&&initialCharge!==undefined&&initialCharge!==null&&String(initialCharge).trim()!=='')customerCents(initialCharge);
   if ((repair.invoices || []).some((invoice) => clean(invoice.vendor).length === 1)) {
     return {ok: false, error: "Vendor names must be at least 2 characters."};
   }
@@ -372,6 +376,11 @@ async function saveDrivewiseRepair(request, session) {
     repair.invoices = await saveDrivewiseInvoiceFiles(repair.id, repair.invoices);
   } catch (error) {
     return {ok: false, error: error.message};
+  }
+
+  if(existingIndex<0&&repair.recordType!=="shopSupply"){
+    await customer.createRepair(repair,session.username,initialCharge,logStateChange);
+    return drivewiseState(session);
   }
 
   if (existingIndex >= 0) {

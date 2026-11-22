@@ -41,3 +41,20 @@ test('historical records, supplies and unknown IDs never receive customer ledger
  assert.equal(Object.keys((await f.workflow.snapshot()).accounts).length,0);
  await assert.rejects(f.workflow.saveSettings(['invalid'],'Staff'),{statusCode:400});
 });
+test('new repair and agreed charge save together, preserve old records and reject duplicate creation',async()=>{
+ const f=fixture(),before=structuredClone(f.records.get('appState/drivewise').state.repairs);
+ const repair={id:'new-repair',ownerName:'Sample Owner',payer:'Sample Payer',invoices:[]};
+ await f.workflow.createRepair(repair,'Staff','125.35',state=>{state.adminLog=['Created'];});
+ const state=f.records.get('appState/drivewise').state;
+ assert.deepEqual(state.repairs.slice(1),before);assert.deepEqual(state.repairs[0],repair);
+ const snapshot=await f.workflow.snapshot();assert.equal(snapshot.accounts['new-repair'].chargeCents,12535);assert.equal(snapshot.accounts['new-repair'].balanceCents,12535);assert.equal(snapshot.notifications.pending,0);
+ await assert.rejects(f.workflow.createRepair(repair,'Staff','999',()=>{}),{statusCode:409});assert.equal((await f.workflow.snapshot()).accounts['new-repair'].chargeCents,12535);
+});
+test('new request requires payer and rejects invalid agreed charge before writing',async()=>{
+ const f=fixture(),before=structuredClone(f.records.get('appState/drivewise'));
+ await assert.rejects(f.workflow.createRepair({id:'new'},'Staff','10',()=>{}),/Payer is required/);
+ await assert.rejects(f.workflow.createRepair({id:'new',payer:'Sample'},'Staff','10.001',()=>{}),/valid dollar/);
+ assert.deepEqual(f.records.get('appState/drivewise'),before);assert.equal(Object.keys((await f.workflow.snapshot()).accounts).length,0);
+ await f.workflow.createRepair({id:'pending-charge',payer:'Sample'},'Staff','',()=>{});
+ assert.equal((await f.workflow.snapshot()).accounts['pending-charge'],undefined);
+});

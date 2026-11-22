@@ -1,6 +1,8 @@
 import MechanicPage from './MechanicPage'
+import DrivewiseHeader from './DrivewiseHeader'
+import {vehicleRepairComplete} from './drivewise-dashboard'
 import CustomerPayments, {NotificationSettings} from './CustomerPayments'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {onAuthStateChanged,signInWithCustomToken,signOut,setPersistence,browserSessionPersistence} from 'firebase/auth'
 import {auth} from './firebase'
 import {handleHubSso} from './hub-sso'
@@ -22,10 +24,6 @@ async function drivewiseFetch(url,options={}) {
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`
-}
-
-function appUrl(path = '') {
-  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
 }
 
 function formatCurrency(value) {
@@ -99,7 +97,8 @@ function DrivewiseAdminApp() {
   const [login, setLogin] = useState({ username: '', password: '' })
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
-  const [activeView, setActiveView] = useState('entry')
+  const [activeView, setActiveView] = useState('repairs')
+  const [repairScope,setRepairScope] = useState('open')
   const [filters, setFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [supplyFilters, setSupplyFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [repairView, setRepairView] = useState('vehicle')
@@ -115,6 +114,8 @@ function DrivewiseAdminApp() {
   const [share,setShare]=useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const savingRepair = useRef(false)
+  const [repairSaving,setRepairSaving] = useState(false)
 
   const authHeaders = (activeToken = token) => ({
     Accept: 'application/json',
@@ -139,7 +140,6 @@ function DrivewiseAdminApp() {
     }
     setData(normalizeDrivewisePayload(payload))
     setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
-    if (payload.role === 'accounting') setActiveView('invoices')
     if (payload.role === 'recovery') setActiveView('entry')
     const linkedId=new URLSearchParams(window.location.search).get('repair')||sessionStorage.getItem('drivewise-requested-repair')
     const linkedRepair=linkedId&&payload.role!=='recovery'&&payload.repairs?.find(r=>r.id===linkedId)
@@ -181,6 +181,7 @@ function DrivewiseAdminApp() {
 
   const saveRepair = async (event) => {
     event.preventDefault()
+    if(savingRepair.current)return
     setError('')
     setMessage('')
     if (needsVehicleDecision) {
@@ -197,6 +198,9 @@ function DrivewiseAdminApp() {
       setError(`Confirm whether ${unresolvedVendor.typed} is a new vendor or ${unresolvedVendor.likelyVendor}.`)
       return
     }
+    savingRepair.current=true
+    setRepairSaving(true)
+    const shareAfterSave=isNewVehicleRequest
     try {
       const repairToSave = await prepareRepairForSave(repairForm)
       setRepairForm(repairToSave)
@@ -215,11 +219,15 @@ function DrivewiseAdminApp() {
       } else {
         setRepairForm(emptyDrivewiseRepair())
         setMessage('DriveWise repair record saved.')
+        if(shareAfterSave)setRepairScope('open')
         setActiveView('repairs')
-        if(!repairForm.id)await openMechanicShare(repairToSave.id)
+        if(shareAfterSave)await openMechanicShare(repairToSave.id)
       }
     } catch (saveError) {
       setError(saveError.message)
+    } finally {
+      savingRepair.current=false
+      setRepairSaving(false)
     }
   }
 
@@ -716,6 +724,7 @@ function DrivewiseAdminApp() {
   const canDeleteUnlockedDrivewiseRecords = ['full', 'accounting'].includes(data?.role) || data?.accessLevels?.includes('accounting')
   const canViewDrivewiseRecords = data?.role !== 'recovery'
   const isRepairFormReadOnly = repairForm.id && (!canManageDrivewiseRepairs || repairIsReadOnly(repairForm))
+  const isNewVehicleRequest=repairForm.recordType!=='shopSupply'&&!repairs.some(repair=>repair.id===repairForm.id)
   const matchingVehicleRepairs = repairs.filter((repair) =>
     repair.id !== repairForm.id &&
     repairForm.year &&
@@ -803,7 +812,7 @@ function DrivewiseAdminApp() {
   const statementInvoices = openInvoices
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
-  const groupedRepairs = groupRepairs(repairs.filter((repair) => !isShopSupplyRecord(repair)), repairView)
+  const groupedRepairs = groupRepairs(repairs.filter((repair) => repair.recordType!=='shopSupply'&&(repairScope==='all'||(repairScope==='completed'?vehicleRepairComplete(repair):!vehicleRepairComplete(repair)))), repairView)
   const shopSupplyRecords = repairs
     .filter(isShopSupplyRecord)
     .sort((a, b) => (b.repairDate || '').localeCompare(a.repairDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
@@ -923,18 +932,9 @@ function DrivewiseAdminApp() {
 
   if (!data) {
     return (
-      <main>
-        <header className="site-header admin-header">
-          <img src={appUrl('downtown-ministries-logo.png')} alt="Downtown Ministries logo" />
-          <div>
-            <p className="eyebrow">DriveWise</p>
-            <h1>Invoice Admin</h1>
-            <p className="intro">
-              Track vehicles, repairs, vendors, invoice numbers, costs,
-              statement checks, and invoice files.
-            </p>
-          </div>
-        </header>
+      <main className="drivewise-workspace">
+        <DrivewiseHeader data={{username:'',hubSession:true,role:'guest',repairs:[]}} canRepair={false} canView={false} onLogout={()=>window.location.assign('https://dtmapp.web.app')}/>
+
         <section className="admin-shell single-panel">
           <a className="primary-action" href="/#dtm-hub">Sign in through DTM Hub</a><form className="panel admin-login-panel" onSubmit={handleLogin}>
             <label>
@@ -967,77 +967,12 @@ function DrivewiseAdminApp() {
   }
 
   return (
-    <main>
+    <main className="drivewise-workspace">
       {share&&<div className="mechanic-backdrop"><section role="dialog" aria-modal="true" aria-label="Share mechanic repair link" className="panel mechanic-share"><h2>Share mechanic repair link</h2><p>The mechanic can use this link for 30 days without signing in. Creating another link replaces the previous one.</p><label>Repair link<input readOnly value={share.url}/></label><div className="header-actions"><button type="button" onClick={()=>navigator.clipboard.writeText(share.url).then(()=>setMessage('Link copied.')).catch(()=>setMessage('Select and copy the repair link.'))}>Copy link</button><a href={'mailto:?subject='+encodeURIComponent('DTM vehicle repair')+'&body='+encodeURIComponent('Please review and complete this vehicle repair: '+share.url+'\nThis link expires in 30 days.')}>Email repair link</a><button type="button" onClick={()=>setShare(null)}>Close</button></div></section></div>}
-      <header className="site-header admin-header">
-        <img src={appUrl('downtown-ministries-logo.png')} alt="Downtown Ministries logo" />
-        <div>
-          <p className="eyebrow">DriveWise</p>
-          <h1>Invoice Dashboard</h1>
-          <p className="intro">
-            Signed in as {data.username}. {data.role === 'recovery'
-              ? 'Recover the full-admin account without opening DriveWise records.'
-              : 'Manage repair face sheets, invoice tracking, vendor statement checks, and invoice files.'}
-          </p>
-          <div className="header-actions">
-            <button className="secondary-action" onClick={logout} type="button">{data.hubSession?'Back to DTM Hub':'Log out'}</button>{data.hubSession&&data.role==='full'&&<a className="secondary-action" href="https://dtmapp.web.app">App Access in DTM Hub</a>}
-          </div>
-          {canViewDrivewiseRecords && (
-            <nav className="top-menu">
-              {canManageDrivewiseRepairs && (
-                <>
-                  <button
-                    className={activeView === 'entry' ? 'active' : ''}
-                    onClick={startNewRepair}
-                    type="button"
-                  >
-                    New Repair Record
-                  </button>
-                  <button
-                    className={activeView === 'supplies' ? 'active' : ''}
-                    onClick={startShopSupplies}
-                    type="button"
-                  >
-                    New Shop Supplies
-                  </button>
-                </>
-              )}
-              <button
-                className={activeView === 'repairs' ? 'active' : ''}
-                onClick={() => setActiveView('repairs')}
-                type="button"
-              >
-                Vehicle Repair Records
-              </button>
-              <button
-                className={activeView === 'supplyRecords' ? 'active' : ''}
-                onClick={() => setActiveView('supplyRecords')}
-                type="button"
-              >
-                Shop Supplies Records
-              </button>
-              <button
-                className={activeView === 'invoices' ? 'active' : ''}
-                onClick={() => setActiveView('invoices')}
-                type="button"
-              >
-                Vendor Invoice View
-              </button>
-              <button className={activeView==='customerPayments'?'active':''} onClick={()=>setActiveView('customerPayments')} type="button">Customer payments</button>
-              {data.role==='full'&&<button className={activeView==='notifications'?'active':''} onClick={()=>setActiveView('notifications')} type="button">Notifications</button>}
-              {data.role === 'full' && canManageMainAccount && (
-                <button
-                  className={activeView === 'admin' ? 'active' : ''}
-                  onClick={() => setActiveView('admin')}
-                  type="button"
-                >
-                  Admin
-                </button>
-              )}
-            </nav>
-          )}
-        </div>
-      </header>
+      <DrivewiseHeader data={data} activeView={activeView} repairScope={repairScope} canRepair={canManageDrivewiseRepairs} canView={canViewDrivewiseRecords} canLegacyAdmin={canManageMainAccount}
+        onView={setActiveView} onRepairs={scope=>{setRepairScope(scope);setActiveView('repairs')}} onNewRepair={startNewRepair} onNewSupply={startShopSupplies}
+        onInvoices={()=>{setFilters({vendor:'all',statement:'unchecked'});setActiveView('invoices')}} onLogout={logout}/>
+
 
       <section className="admin-shell drivewise-shell">
         {canViewDrivewiseRecords&&activeView==='customerPayments'&&<CustomerPayments repairs={repairs} role={data.role} request={customerRequest} onAccount={(id,account)=>{
@@ -1095,15 +1030,21 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Payer
+              Payer *
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, payer: event.target.value }))
                 }
                 disabled={isRepairFormReadOnly}
+                required
                 value={repairForm.payer}
               />
             </label>
+            {isNewVehicleRequest&&<label>
+              Agreed charge ($)
+              <input type="number" min="0" max="1000000" step="0.01" value={repairForm.agreedCharge||''} onChange={event=>setRepairForm(current=>({...current,agreedCharge:event.target.value}))}/>
+              <small>Enter 0.00 if no payment is due. If not agreed yet, leave blank and enter it later under Customer payments.</small>
+            </label>}
             <label>
               Year *
               <input
@@ -1268,6 +1209,7 @@ function DrivewiseAdminApp() {
             />
           )}
 
+          {!isNewVehicleRequest&&<>
           <div className="date-editor-header">
             <strong>Parts and invoices</strong>
           </div>
@@ -1402,12 +1344,14 @@ function DrivewiseAdminApp() {
               </div>
             ))}
           </div>
+          </>}
           {!isRepairFormReadOnly && (
             <div className="form-action-row">
+              {!isNewVehicleRequest&&
               <button className="secondary-action" onClick={addInvoice} type="button">
                 Add another invoice
-              </button>
-              <button className="primary-action admin-save" type="submit">Save repair record</button>
+              </button>}
+              <button className="primary-action admin-save" type="submit" disabled={repairSaving}>{repairSaving?'Saving…':isNewVehicleRequest?'Save and share with mechanic':'Save repair record'}</button>
             </div>
           )}
         </form>
@@ -1709,7 +1653,7 @@ function DrivewiseAdminApp() {
           <div className="section-heading admin-heading-row">
             <div>
               <p className="eyebrow">Repairs</p>
-              <h2>Vehicle Repair Records</h2>
+              <h2>{repairScope==='open'?'Open vehicle repairs':repairScope==='completed'?'Completed vehicle repairs':'Vehicle repair records'}</h2>
             </div>
             <div className="view-toggle">
               <button
@@ -1729,6 +1673,7 @@ function DrivewiseAdminApp() {
             </div>
           </div>
           <div className="drivewise-repair-list">
+            {groupedRepairs.length===0&&<p className="dw-empty">{repairScope==='open'?'No open vehicle repairs.':repairScope==='completed'?'No completed vehicle repairs.':'No vehicle repairs recorded.'}</p>}
             {groupedRepairs.map((group) => (
               <section className="repair-group" key={group.label}>
                 <h3>{group.label}</h3>
@@ -1870,6 +1815,7 @@ function emptyDrivewiseRepair() {
     vehicleInfo: '',
     vehicleTrackingId: '',
     payer: '',
+    agreedCharge: '',
     neededRepairs: '',
     status: 'Open',
     notes: '',

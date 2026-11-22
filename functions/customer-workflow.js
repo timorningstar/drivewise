@@ -1,4 +1,4 @@
-const {changeAccount,summarize,notificationMessage}=require('./customer-account');
+const {changeAccount,summarize,notificationMessage,cents}=require('./customer-account');
 const endpoint='https://dtmapp.web.app/api/dtm-access/drivewise/mail';
 const defaultRecipients=['t1@downtownmin.org'];
 const fail=(message,statusCode=400)=>{throw Object.assign(Error(message),{statusCode});};
@@ -11,6 +11,22 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
   const accounts=db.collection('drivewiseCustomerAccounts'),outbox=db.collection('drivewiseNotifications'),settings=db.collection('drivewiseSettings').doc('notifications');
   const settingsValue=snapshot=>snapshot.data()?.recipients||defaultRecipients;
   return {
+    // Save a new request and any initial agreed charge in one transaction.
+    // This never rewrites the existing repair list from an earlier page load.
+    async createRepair(repair,actor,initialCharge,logChange) {
+      if(!String(repair.payer||'').trim())fail('Payer is required.');
+      const hasCharge=initialCharge!==undefined&&initialCharge!==null&&String(initialCharge).trim()!=='';
+      if(hasCharge)cents(initialCharge);
+      return db.runTransaction(async tx=>{
+        const ref=stateRef(),snapshot=await tx.get(ref),state=snapshot.data()?.state;
+        if(!state)fail('DriveWise records are unavailable.',503);
+        if((state.repairs||[]).some(r=>r.id===repair.id))fail('This repair was already saved. Refresh the record before making further changes.',409);
+        state.repairs=[repair,...(state.repairs||[])];
+        logChange(state,actor,'Add DriveWise record',`${actor} saved repair record for ${repair.ownerName}.`);
+        tx.set(ref,{state,updatedAt:new Date()},{merge:true});
+        if(hasCharge)tx.create(accounts.doc(repair.id),changeAccount({},{action:'charge',amount:initialCharge},actor,'').account);
+      });
+    },
     async snapshot() {
       const [rows,pending,config]=await Promise.all([accounts.get(),outbox.where('sentAt','==',null).limit(100).get(),settings.get()]);
       return {accounts:Object.fromEntries(rows.docs.map(doc=>[doc.id,doc.data()])),notifications:{recipients:settingsValue(config),pending:pending.size,
