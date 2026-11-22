@@ -1,4 +1,5 @@
 import MechanicPage from './MechanicPage'
+import CustomerPayments, {NotificationSettings} from './CustomerPayments'
 import { useEffect, useState } from 'react'
 import {onAuthStateChanged,signInWithCustomToken,signOut,setPersistence,browserSessionPersistence} from 'firebase/auth'
 import {auth} from './firebase'
@@ -34,7 +35,7 @@ function formatCurrency(value) {
   }).format(value || 0)
 }
 
-function repairIsReadOnly(repair) {return Boolean(repair.historicalComplete)||repairHasCompletedStatement(repair)}
+function repairIsReadOnly(repair) {return Boolean(repair.historicalComplete)||Boolean(repair.customerAccount?.closedAt)||repairHasCompletedStatement(repair)}
 
 function repairHasCompletedStatement(repair) {
   return (repair.invoices || []).some((invoice) => invoice.statementComplete)
@@ -120,6 +121,12 @@ function DrivewiseAdminApp() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${activeToken}`,
   })
+  const customerRequest = async (path,body) => {
+    const response=await drivewiseFetch(apiUrl(path),{method:'POST',headers:authHeaders(),body:JSON.stringify(body)})
+    const result=await response.json()
+    if(!response.ok)throw Error(result.error||'Could not save this change.')
+    return result
+  }
 
   const loadDrivewiseState = async (activeToken = token) => {
     const response = await drivewiseFetch(apiUrl(`/api/drivewise-state?app=${DRIVEWISE_APP_ID}`), {
@@ -134,6 +141,9 @@ function DrivewiseAdminApp() {
     setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
     if (payload.role === 'accounting') setActiveView('invoices')
     if (payload.role === 'recovery') setActiveView('entry')
+    const linkedId=new URLSearchParams(window.location.search).get('repair')||sessionStorage.getItem('drivewise-requested-repair')
+    const linkedRepair=linkedId&&payload.role!=='recovery'&&payload.repairs?.find(r=>r.id===linkedId)
+    if(linkedRepair){sessionStorage.removeItem('drivewise-requested-repair');setRepairForm({...linkedRepair,invoices:linkedRepair.invoices?.length?linkedRepair.invoices:[emptyDrivewiseInvoice()]});setActiveView('entry');window.history.replaceState(null,'',window.location.pathname)}
     setError('')
   }
 
@@ -1013,6 +1023,8 @@ function DrivewiseAdminApp() {
               >
                 Vendor Invoice View
               </button>
+              <button className={activeView==='customerPayments'?'active':''} onClick={()=>setActiveView('customerPayments')} type="button">Customer payments</button>
+              {data.role==='full'&&<button className={activeView==='notifications'?'active':''} onClick={()=>setActiveView('notifications')} type="button">Notifications</button>}
               {data.role === 'full' && canManageMainAccount && (
                 <button
                   className={activeView === 'admin' ? 'active' : ''}
@@ -1028,6 +1040,11 @@ function DrivewiseAdminApp() {
       </header>
 
       <section className="admin-shell drivewise-shell">
+        {canViewDrivewiseRecords&&activeView==='customerPayments'&&<CustomerPayments repairs={repairs} role={data.role} request={customerRequest} onAccount={(id,account)=>{
+          setData(current=>({...current,repairs:current.repairs.map(r=>r.id===id?{...r,customerAccount:account}:r)}))
+          setRepairForm(current=>current.id===id?{...current,customerAccount:account}:current)
+        }}/>}
+        {data.role==='full'&&activeView==='notifications'&&<NotificationSettings settings={data.notificationSettings} request={customerRequest} onSettings={recipients=>setData(current=>({...current,notificationSettings:{...current.notificationSettings,recipients}}))}/>}
         {data.role === 'recovery' && canManageMainAccount && adminAccountPanel}
 
         {(canManageDrivewiseRepairs || (canViewDrivewiseRecords && repairForm.id)) && activeView === 'entry' && (
@@ -1723,19 +1740,20 @@ function DrivewiseAdminApp() {
                       {vehicleLabel(repair)}
                       {repair.payer ? ` - Payer: ${repair.payer}` : ''}
                       {repair.historicalComplete ? ' - Repair complete' : ''}
+                      {repair.customerAccount?.closedAt ? ' - Closed (customer balance paid)' : ''}
                       {repairHasCompletedStatement(repair) ? ' - Statement complete' : ''}
                       {repair.mechanic?.completedAt&&<strong> · Repair completed by {repair.mechanic.mechanicName}</strong>}
                       {repair.mechanic&&<details><summary>Mechanic updates and attachments</summary>{repair.mechanic.notes.map((entry,i)=><p key={i}>{entry.author}: {entry.body}</p>)}{repair.mechanic.files.map(file=><p key={file.id}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a></p>)}</details>}
                     </span>
                     <div>
-                      {canManageDrivewiseRepairs&&!repair.historicalComplete&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
+                      {canManageDrivewiseRepairs&&!repairIsReadOnly(repair)&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
                       <button className="text-action" type="button" onClick={()=>revokeMechanicShare(repair.id)}>Revoke link</button></>}
                       {!canManageDrivewiseRepairs || repairIsReadOnly(repair) ? (
                         <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>
                       ) : (
                         <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
                       )}
-                      {canManageDrivewiseRepairs && canDeleteUnlockedDrivewiseRecords && !repairIsReadOnly(repair) && (
+                      {canManageDrivewiseRepairs && canDeleteUnlockedDrivewiseRecords && !repairIsReadOnly(repair) && !repair.customerAccount && (
                         <button
                           className="text-action"
                           onClick={() => deleteRepair(repair.id, { confirm: true })}

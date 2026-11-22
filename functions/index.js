@@ -1,6 +1,8 @@
 const {assertRepairEditable} = require("./repair-status");
 const {createMechanicService} = require("./mechanic");
 const {hubSession} = require("./hub-access");
+const {customerWorkflow} = require('./customer-workflow');
+const {onSchedule} = require('firebase-functions/v2/scheduler');
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const {onRequest} = require("firebase-functions/v2/https");
@@ -21,8 +23,9 @@ const APP_ID = "drivewise";
 const adminSessionCollection = db.collection("adminSessions");
 const mechanicWork=db.collection('drivewiseMechanicWork');
 const mechanicLinks=db.collection('drivewiseMechanicLinks');
+const customer=customerWorkflow({db,stateRef,workCollection:mechanicWork});
 const mechanic=createMechanicService({
- repo:{link:async key=>(await mechanicLinks.doc(key).get()).data(),work:async id=>(await mechanicWork.doc(id).get()).data(),putLink:(key,value)=>mechanicLinks.doc(key).create(value),mutate:(id,change)=>db.runTransaction(async tx=>{const ref=mechanicWork.doc(id),snapshot=await tx.get(ref),next=change(snapshot.data()||{});tx.set(ref,next);return next;})},
+ repo:{link:async key=>(await mechanicLinks.doc(key).get()).data(),work:async id=>(await mechanicWork.doc(id).get()).data(),putLink:(key,value)=>mechanicLinks.doc(key).create(value),mutate:(id,change)=>customer.mutateWork(id,change)},
  readRepair:async id=>(await readState()).repairs.find(r=>r.id===id),
  saveFile:async(id,file)=>{const path=`drivewiseInvoices/${id}/mechanic-${file.id}`;const bucket=await saveInvoiceBufferToStorage(path,file.bytes,file.type);return {id:file.id,name:file.name,type:file.type,path,bucket};},
  signFile:async(file,expires)=>{const [url]=await storage.bucket(file.bucket).file(file.path).getSignedUrl({action:'read',expires});return url;},
@@ -214,6 +217,7 @@ async function requireAdmin(request, allowedRoles) {
 async function drivewiseState(session) {
   const state = await readState();
   const progress=await mechanicProgress();
+  const customerState=session.role==='recovery'?{accounts:{},notifications:null}:await customer.snapshot();
   return {
     ok: true,
     role: session.role,
@@ -230,7 +234,8 @@ async function drivewiseState(session) {
         createdAt: adminRecord.createdAt || "",
       }))
       : [],
-    repairs: session.role === "recovery" ? [] : await enrichDrivewiseRepairs((state.repairs || []).map(repair=>({...repair,mechanic:progress.get(repair.id)}))),
+    repairs: session.role === "recovery" ? [] : await enrichDrivewiseRepairs((state.repairs || []).map(repair=>({...repair,mechanic:progress.get(repair.id),customerAccount:customerState.accounts[repair.id]||null}))),
+    notificationSettings:session.role==='full'?customerState.notifications:null,
     paymentBatches: session.role === "recovery" ? [] : state.paymentBatches || [],
     adminLog: state.adminLog || [],
   };
@@ -335,6 +340,7 @@ async function saveDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = sanitizeDrivewiseRepair(request.body?.repair || {});
   assertRepairEditable((state.repairs || []).find(item=>item.id===repair.id));
+  if(repair.id)await customer.assertOpen(repair.id);
   if (repair.recordType === "shopSupply") {
     repair.ownerName = "Shop Supplies";
     repair.vehicleInfo = "Shop Supplies";
@@ -397,6 +403,7 @@ async function deleteDrivewiseRepair(request, session) {
   const repair = (state.repairs || []).find((item) => item.id === repairId);
   if (!repair) return {ok: false, error: "Repair record was not found."};
   assertRepairEditable(repair);
+  await customer.assertDeletable(repairId);
   if (repairHasCompletedStatement(repair)) {
     return {ok: false, error: "This repair record has completed statement invoices and cannot be deleted."};
   }
@@ -830,16 +837,32 @@ function routePath(request) {
   return path.replace(/^\/api/, "") || "/";
 }
 
-exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request, response) => {
+exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:120}, async (request, response) => {
   try {
     const path = routePath(request);
     if(request.method==='POST'&&['/mechanic/view','/mechanic/update','/mechanic/upload'].includes(path)){
       if(request.get('origin')!=='https://drivewise.web.app'){sendJson(response,403,{error:'Open the mechanic link directly.'});return;}
-      const data=request.body||{};const result=path==='/mechanic/view'?await mechanic.view(data.token):path==='/mechanic/update'?await mechanic.update(data.token,data):await mechanic.upload(data.token,data);sendJson(response,200,result);return;
+      const data=request.body||{};const result=path==='/mechanic/view'?await mechanic.view(data.token):path==='/mechanic/update'?await mechanic.update(data.token,data):await mechanic.upload(data.token,data);
+      if(path==='/mechanic/update'&&data.complete===true)await customer.flush(1);
+      sendJson(response,200,result);return;
+    }
+    if(request.method==='POST'&&path==='/drivewise-customer-account') {
+      const session=await requireAdmin(request,['full','admin','schedule','accounting']);
+      if(request.body?.action==='void'&&!['full','admin','accounting'].includes(session.role))throw Object.assign(Error('Accounting access is required to reverse a payment.'),{statusCode:403});
+      const account=await customer.mutateAccount(clean(request.body?.repairId),request.body||{},session.username);
+      await customer.flush(1);sendJson(response,200,{ok:true,account});return;
+    }
+    if(request.method==='POST'&&path==='/drivewise-notification-settings') {
+      const session=await requireAdmin(request,['full']);
+      const recipients=await customer.saveSettings(request.body?.recipients,session.username);sendJson(response,200,{ok:true,recipients});return;
+    }
+    if(request.method==='POST'&&path==='/drivewise-notification-retry') {
+      await requireAdmin(request,['full']);await customer.retry();sendJson(response,200,{ok:true,...await customer.flush(5)});return;
     }
     if(request.method==='POST'&&['/drivewise-mechanic-share','/drivewise-mechanic-revoke'].includes(path)){
       const session=await requireAdmin(request,['full','admin','schedule']);
       const id=clean(request.body?.repairId);if(!/^[a-zA-Z0-9_-]{1,120}$/.test(id)){sendJson(response,400,{error:'Choose a vehicle repair.'});return;}
+      if(path.endsWith('-share'))await customer.assertOpen(id);
       const result=path.endsWith('-share')?await mechanic.issue(id,session.username):await mechanic.revoke(id);sendJson(response,200,result);return;
     }
 
@@ -954,6 +977,11 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public"}, async (request
     logger.error("API request failed", error);
     sendJson(response, error.statusCode || 500, {error: error.statusCode ? error.message : "Server error."});
   }
+});
+
+exports.drivewiseNotificationRetry=onSchedule({schedule:'every 15 minutes',region:'us-central1',maxInstances:1,timeoutSeconds:540},async()=>{
+  const result=await customer.flush(5);
+  if(result.attempted>result.sent)logger.warn('DriveWise notification delivery remains pending.',result);
 });
 
 function sendJson(response, status, body) {
