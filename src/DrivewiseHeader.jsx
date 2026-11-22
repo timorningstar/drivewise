@@ -1,3 +1,4 @@
+const TESTING=import.meta.env.VITE_DRIVEWISE_TESTING===true
 import {dashboardTotals} from './drivewise-dashboard'
 export default function DrivewiseHeader({data,activeView,repairScope,canRepair,canView,canLegacyAdmin,onView,onRepairs,onNewRepair,onNewSupply,onInvoices,onLogout}) {
   const totals=dashboardTotals(data.repairs||[])
@@ -10,7 +11,7 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
       <div className="dw-account"><span>{data.username}</span>{data.hubSession&&data.role==='full'&&<a href="https://dtmapp.web.app" className="dw-access-link">App Access</a>}<button className="dw-back" onClick={onLogout} type="button">{data.hubSession?'Back to DTM Hub':'Log out'}</button></div>
     </div></div>
     <div className="dw-shell">
-      <div className="dw-intro"><div><h1>DriveWise</h1><p>{canView?'Submit, share, and track vehicle repairs.':data.role==='recovery'?'Recover the full-admin account without opening DriveWise records.':'Sign in to manage vehicle repairs.'}</p></div>
+      <div className="dw-intro"><div><h1>DriveWise{TESTING?' Testing':''}</h1><p>{canView?'Submit, share, and track vehicle repairs.':data.role==='recovery'?'Recover the full-admin account without opening DriveWise records.':'Sign in to manage vehicle repairs.'}</p></div>
         {canRepair&&<button className="primary-action dw-new" type="button" onClick={supply?onNewSupply:onNewRepair}>{supply?'+ New shop supplies':'+ New repair'}</button>}
       </div>
       {canView&&<>
@@ -21,8 +22,8 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
           <button type="button" className="dw-stat" onClick={onInvoices}><small>Unchecked invoices</small><strong>{totals.unchecked}</strong></button>
         </div>
         <nav className="dw-tabs" aria-label="DriveWise navigation">
-          {tab('Open repairs','repairs','open')}{tab('Completed','repairs','completed')}{tab('All vehicle records','repairs','all')}{tab('Shop supplies','supplyRecords')}{tab('Vendor invoices','invoices')}{tab('Customer payments','customerPayments')}
-          {data.role==='full'&&tab('Notifications','notifications')}{data.role==='full'&&canLegacyAdmin&&tab('Admin','admin')}
+          {TESTING&&tab('Applications and diagnostics','workflow')}{tab('Open repairs','repairs','open')}{tab('Completed','repairs','completed')}{tab('All vehicle records','repairs','all')}{tab('Shop supplies','supplyRecords')}{tab('Vendor invoices','invoices')}{tab('Customer payments','customerPayments')}
+          {!TESTING&&data.role==='full'&&tab('Notifications','notifications')}{data.role==='full'&&canLegacyAdmin&&tab('Admin','admin')}
         </nav>
       </>}
     </div>

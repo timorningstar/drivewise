@@ -1,5 +1,9 @@
 import MechanicPage from './MechanicPage'
+import IntakeWorkflow from './IntakeWorkflow'
+import CustomerApplication from './CustomerApplication'
 import DrivewiseHeader from './DrivewiseHeader'
+import CorrectionDialog, {InvoiceHistory,StatementCell} from './CorrectionDialog'
+import MoveInvoiceDialog from './MoveInvoiceDialog'
 import {vehicleRepairComplete} from './drivewise-dashboard'
 import CustomerPayments, {NotificationSettings} from './CustomerPayments'
 import { useEffect, useState, useRef } from 'react'
@@ -9,6 +13,7 @@ import {handleHubSso} from './hub-sso'
 import './App.css'
 
 const DRIVEWISE_APP_ID = 'drivewise'
+const TESTING = import.meta.env.VITE_DRIVEWISE_TESTING === true
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const DRIVEWISE_TOKEN_KEY = 'drivewiseAdminToken'
 const HIDDEN_VENDOR_LIST_NAMES = new Set(['amazon - % todd lehman'])
@@ -33,7 +38,7 @@ function formatCurrency(value) {
   }).format(value || 0)
 }
 
-function repairIsReadOnly(repair) {return Boolean(repair.historicalComplete)||Boolean(repair.customerAccount?.closedAt)||repairHasCompletedStatement(repair)}
+function repairIsReadOnly(repair) {if(repair.correctionOpen)return false;return Boolean(repair.historicalComplete)||Boolean(repair.customerAccount?.closedAt)||repairHasCompletedStatement(repair)}
 
 function repairHasCompletedStatement(repair) {
   return (repair.invoices || []).some((invoice) => invoice.statementComplete)
@@ -97,7 +102,7 @@ function DrivewiseAdminApp() {
   const [login, setLogin] = useState({ username: '', password: '' })
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
-  const [activeView, setActiveView] = useState('repairs')
+  const [activeView, setActiveView] = useState(TESTING?'workflow':'repairs')
   const [repairScope,setRepairScope] = useState('open')
   const [filters, setFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [supplyFilters, setSupplyFilters] = useState({ vendor: 'all', statement: 'unchecked' })
@@ -116,14 +121,19 @@ function DrivewiseAdminApp() {
   const [error, setError] = useState('')
   const savingRepair = useRef(false)
   const [repairSaving,setRepairSaving] = useState(false)
+  const [correctionTarget,setCorrectionTarget]=useState(null)
+  const [statementDate,setStatementDate]=useState('')
+  const [statementSaving,setStatementSaving]=useState(false)
+  const [moveTarget,setMoveTarget]=useState(null)
 
   const authHeaders = (activeToken = token) => ({
     Accept: 'application/json',
     'Content-Type': 'application/json',
     Authorization: `Bearer ${activeToken}`,
   })
-  const customerRequest = async (path,body) => {
-    const response=await drivewiseFetch(apiUrl(path),{method:'POST',headers:authHeaders(),body:JSON.stringify(body)})
+  const customerRequest = async (path,body,blob=false) => {
+    const response=await drivewiseFetch(apiUrl(path),{method:blob?'GET':'POST',headers:authHeaders(),...(blob?{}:{body:JSON.stringify(body)})})
+    if(blob){if(!response.ok)throw Error('Could not download the diagnostic form.');return response.blob()}
     const result=await response.json()
     if(!response.ok)throw Error(result.error||'Could not save this change.')
     return result
@@ -220,6 +230,7 @@ function DrivewiseAdminApp() {
         setRepairForm(emptyDrivewiseRepair())
         setMessage('DriveWise repair record saved.')
         if(shareAfterSave)setRepairScope('open')
+        else if(repairForm.correctionOpen)setRepairScope(vehicleRepairComplete(payload.repairs.find(r=>r.id===repairToSave.id)||{})?'completed':'open')
         setActiveView('repairs')
         if(shareAfterSave)await openMechanicShare(repairToSave.id)
       }
@@ -323,16 +334,20 @@ function DrivewiseAdminApp() {
 
   const completeStatementInvoices = async () => {
     if (!statementInvoices.length) return
+    if(statementSaving)return
+    if(!statementDate){setError('Enter the statement date once for all selected invoices.');return}
     if (!window.confirm('Mark the selected statement invoices complete? Completed invoices will be locked from editing.')) {
       return
     }
     setError('')
     setMessage('')
+    setStatementSaving(true)
     try {
       const response = await drivewiseFetch(apiUrl(`/api/drivewise-complete-statement?app=${DRIVEWISE_APP_ID}`), {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
+          statementDate,
           invoices: statementInvoices.map((invoice) => ({
             repairId: invoice.repair.id,
             invoiceId: invoice.id,
@@ -343,8 +358,12 @@ function DrivewiseAdminApp() {
       if (!response.ok || !payload.ok) throw new Error(payload.error || 'Statement invoices could not be completed.')
       setData(normalizeDrivewisePayload(payload))
       setMessage('Statement invoices marked complete.')
+      setStatementDate('')
+      setFilters(current=>({...current,statement:'checked'}))
     } catch (completeError) {
       setError(completeError.message)
+    } finally {
+      setStatementSaving(false)
     }
   }
 
@@ -599,6 +618,7 @@ function DrivewiseAdminApp() {
     }
     setRepairForm({
       ...repair,
+      agreedCharge:repair.customerAccount?.chargeCents===null||repair.customerAccount?.chargeCents===undefined?'':(repair.customerAccount.chargeCents/100).toFixed(2),
       invoices: repair.invoices?.length ? repair.invoices : [emptyDrivewiseInvoice()],
     })
     setActiveView('entry')
@@ -608,6 +628,7 @@ function DrivewiseAdminApp() {
   const viewRepair = (repair) => {
     setRepairForm({
       ...repair,
+      agreedCharge:repair.customerAccount?.chargeCents===null||repair.customerAccount?.chargeCents===undefined?'':(repair.customerAccount.chargeCents/100).toFixed(2),
       invoices: repair.invoices?.length ? repair.invoices : [emptyDrivewiseInvoice()],
     })
     setActiveView('entry')
@@ -928,8 +949,9 @@ function DrivewiseAdminApp() {
 
   if(!authReady)return <main><section className="panel"><h1>DriveWise</h1><p role="status">Opening your DTM workspace...</p></section></main>
 
-  if(!data&&hubEntry)return <main><section className="panel"><h1>DriveWise</h1><p role="status">{error||'Opening your DTM workspace...'}</p><a href="https://dtmapp.web.app">Return to DTM Hub</a><button type="button" onClick={()=>setHubEntry(false)}>Use an existing DriveWise login</button></section></main>
+  if(!data&&hubEntry)return <main><section className="panel"><h1>DriveWise</h1><p role="status">{error||'Opening your DTM workspace...'}</p><a href="https://dtmapp.web.app">Return to DTM Hub</a>{!TESTING&&<button type="button" onClick={()=>setHubEntry(false)}>Use an existing DriveWise login</button>}</section></main>
 
+  if(!data&&TESTING)return <main className="drivewise-workspace"><section className="panel"><h1>DriveWise Testing</h1><p>Separate test records and uploads. Use your existing DTM Hub login and app permissions.</p>{error&&<p role="alert">{error}</p>}<a className="primary-action" href="/#dtm-hub">Sign in through DTM Hub</a></section></main>
   if (!data) {
     return (
       <main className="drivewise-workspace">
@@ -968,13 +990,28 @@ function DrivewiseAdminApp() {
 
   return (
     <main className="drivewise-workspace">
+      {moveTarget&&<MoveInvoiceDialog target={moveTarget} repairs={repairs} request={customerRequest} onClose={()=>setMoveTarget(null)} onDone={result=>{setData(normalizeDrivewisePayload(result));setMessage('Invoice moved. Its source, destination and reason are retained in the history.')}}/>}
+      {correctionTarget&&<CorrectionDialog key={correctionTarget.repairId+':'+(correctionTarget.invoiceId||'repair')} target={correctionTarget} request={customerRequest} onClose={()=>setCorrectionTarget(null)} onDone={(result,target)=>{
+        setData(normalizeDrivewisePayload(result))
+        if(target.kind==='repair'){
+          const repair=result.repairs.find(r=>r.id===target.repairId)
+          if(repair){setRepairForm({...repair,agreedCharge:repair.customerAccount?.chargeCents===undefined||repair.customerAccount?.chargeCents===null?'':(repair.customerAccount.chargeCents/100).toFixed(2),invoices:repair.invoices?.length?repair.invoices:[emptyDrivewiseInvoice()]});setRepairScope('open');setActiveView('entry')}
+          setMessage('Repair reopened for corrections. Completed invoices remain locked until reversed.')
+        }else {
+          setFilters(current=>({...current,statement:'all'}))
+          const fresh=result.repairs.find(r=>r.id===target.repairId)
+          if(fresh)setRepairForm(current=>current.id===fresh.id?{...current,revision:fresh.revision,invoices:current.invoices.map(invoice=>invoice.id===target.invoiceId?fresh.invoices.find(i=>i.id===invoice.id):invoice)}:current)
+          setMessage('Invoice verification reversed. The reason and prior statement date remain in its history.')
+        }
+      }}/>}
       {share&&<div className="mechanic-backdrop"><section role="dialog" aria-modal="true" aria-label="Share mechanic repair link" className="panel mechanic-share"><h2>Share mechanic repair link</h2><p>The mechanic can use this link for 30 days without signing in. Creating another link replaces the previous one.</p><label>Repair link<input readOnly value={share.url}/></label><div className="header-actions"><button type="button" onClick={()=>navigator.clipboard.writeText(share.url).then(()=>setMessage('Link copied.')).catch(()=>setMessage('Select and copy the repair link.'))}>Copy link</button><a href={'mailto:?subject='+encodeURIComponent('DTM vehicle repair')+'&body='+encodeURIComponent('Please review and complete this vehicle repair: '+share.url+'\nThis link expires in 30 days.')}>Email repair link</a><button type="button" onClick={()=>setShare(null)}>Close</button></div></section></div>}
       <DrivewiseHeader data={data} activeView={activeView} repairScope={repairScope} canRepair={canManageDrivewiseRepairs} canView={canViewDrivewiseRecords} canLegacyAdmin={canManageMainAccount}
-        onView={setActiveView} onRepairs={scope=>{setRepairScope(scope);setActiveView('repairs')}} onNewRepair={startNewRepair} onNewSupply={startShopSupplies}
+        onView={setActiveView} onRepairs={scope=>{setRepairScope(scope);setActiveView('repairs')}} onNewRepair={TESTING?()=>setActiveView('newApplication'):startNewRepair} onNewSupply={startShopSupplies}
         onInvoices={()=>{setFilters({vendor:'all',statement:'unchecked'});setActiveView('invoices')}} onLogout={logout}/>
 
 
       <section className="admin-shell drivewise-shell">
+        {TESTING&&['workflow','newApplication'].includes(activeView)&&<IntakeWorkflow key={activeView} data={data} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))} newRequest={activeView==='newApplication'} onView={setActiveView}/>}
         {canViewDrivewiseRecords&&activeView==='customerPayments'&&<CustomerPayments repairs={repairs} role={data.role} request={customerRequest} onAccount={(id,account)=>{
           setData(current=>({...current,repairs:current.repairs.map(r=>r.id===id?{...r,customerAccount:account}:r)}))
           setRepairForm(current=>current.id===id?{...current,customerAccount:account}:current)
@@ -993,6 +1030,7 @@ function DrivewiseAdminApp() {
               <h2>
                 {isRepairFormReadOnly
                   ? 'View Repair Record'
+                  : repairForm.correctionOpen ? 'Correct Repair Record'
                   : repairForm.id ? 'Edit Repair Record' : 'New Repair Record'}
               </h2>
             </div>
@@ -1005,6 +1043,7 @@ function DrivewiseAdminApp() {
             </button>
           </div>
 
+          {repairForm.correctionHistory?.length>0&&<details className="invoice-history"><summary>Repair correction history</summary>{repairForm.correctionHistory.map(entry=><article key={entry.id}><strong>{entry.openedBy} · {new Date(entry.openedAt).toLocaleString()}</strong><p className="repair-description">Reason: {entry.reason}</p>{entry.finishedAt&&<p>Corrections saved by {entry.finishedBy} · {new Date(entry.finishedAt).toLocaleString()}</p>}</article>)}</details>}
           <div className="field-grid">
             <label>
               Repair date *
@@ -1030,17 +1069,17 @@ function DrivewiseAdminApp() {
               />
             </label>
             <label>
-              Payer *
+              {isNewVehicleRequest?'Payer *':'Payer'}
               <input
                 onChange={(event) =>
                   setRepairForm((current) => ({ ...current, payer: event.target.value }))
                 }
                 disabled={isRepairFormReadOnly}
-                required
+                required={isNewVehicleRequest}
                 value={repairForm.payer}
               />
             </label>
-            {isNewVehicleRequest&&<label>
+            {(isNewVehicleRequest||repairForm.correctionOpen)&&<label>
               Agreed charge ($)
               <input type="number" min="0" max="1000000" step="0.01" value={repairForm.agreedCharge||''} onChange={event=>setRepairForm(current=>({...current,agreedCharge:event.target.value}))}/>
               <small>Enter 0.00 if no payment is due. If not agreed yet, leave blank and enter it later under Customer payments.</small>
@@ -1217,27 +1256,32 @@ function DrivewiseAdminApp() {
             <datalist id={vendorDatalistId}>
               {vendors.map((vendor) => <option key={vendor} value={vendor} />)}
             </datalist>
-            {repairForm.invoices.map((invoice, index) => (
+            {repairForm.invoices.map((invoice, index) => {
+              const invoiceReadOnly=isRepairFormReadOnly||Boolean(invoice.statementComplete)
+              return (
               <div className="drivewise-invoice-card" key={invoice.id}>
                 <div className="receipt-card-header">
                   <strong>Invoice {index + 1}</strong>
-                  {!isRepairFormReadOnly && (
+                  {!invoiceReadOnly && !invoice.statementHistory?.length && (
                     <button className="text-action" onClick={() => removeInvoice(index)} type="button">
                       Remove
                     </button>
                   )}
                 </div>
+                {invoice.statementComplete&&<p className="muted">Verified statement: {invoice.statementDate?formatRepairDate(invoice.statementDate):'Date not recorded'}. Reverse verification before editing this invoice.</p>}
+                {invoice.statementComplete&&canManageDrivewiseAccounting&&<button className="text-action" type="button" onClick={()=>setCorrectionTarget({kind:'invoice',repairId:repairForm.id,invoiceId:invoice.id,label:`${invoice.vendor} · Invoice ${invoice.invoiceNumber}`})}>Reverse verification</button>}
+                <InvoiceHistory invoice={invoice}/>
                 <div className="field-grid">
                   <label>
                     Vendor
                     <input
-                      disabled={isRepairFormReadOnly}
+                      disabled={invoiceReadOnly}
                       list={vendorDatalistId}
                       onBlur={() => showVendorPrompt(invoice)}
                       onChange={(event) => updateInvoice(index, { vendor: event.target.value })}
                       value={invoice.vendor}
                     />
-                    {!isRepairFormReadOnly && shouldShowVendorPrompt(invoice) && (
+                    {!invoiceReadOnly && shouldShowVendorPrompt(invoice) && (
                         <span className="vendor-confirmation">
                           <span>
                             Is this a new vendor or is this {likelyVendorForValue(invoice.vendor)}?
@@ -1255,7 +1299,7 @@ function DrivewiseAdminApp() {
                           </span>
                         </span>
                     )}
-                    {!isRepairFormReadOnly && shouldShowVendorLengthError(invoice) && (
+                    {!invoiceReadOnly && shouldShowVendorLengthError(invoice) && (
                       <span className="vendor-field-error">
                         Vendor names must be at least 2 characters.
                       </span>
@@ -1264,7 +1308,7 @@ function DrivewiseAdminApp() {
                   <label>
                     Invoice #
                     <input
-                      disabled={isRepairFormReadOnly}
+                      disabled={invoiceReadOnly}
                       onChange={(event) => updateInvoice(index, { invoiceNumber: event.target.value })}
                       value={invoice.invoiceNumber}
                     />
@@ -1272,7 +1316,7 @@ function DrivewiseAdminApp() {
                   <label>
                     Part description
                     <input
-                      disabled={isRepairFormReadOnly}
+                      disabled={invoiceReadOnly}
                       onChange={(event) => updateInvoice(index, { partDescription: event.target.value })}
                       value={invoice.partDescription}
                     />
@@ -1280,14 +1324,14 @@ function DrivewiseAdminApp() {
                   <label>
                     Cost
                     <input
-                      disabled={isRepairFormReadOnly}
+                      disabled={invoiceReadOnly}
                       onChange={(event) => updateInvoice(index, { cost: event.target.value })}
                       step="0.01"
                       type="number"
                       value={invoice.cost}
                     />
                   </label>
-                  {!isRepairFormReadOnly && (
+                  {!invoiceReadOnly && (
                     <label className="camera-upload-label">
                       Invoice image or PDF
                       <input
@@ -1315,7 +1359,7 @@ function DrivewiseAdminApp() {
                       )}
                     </label>
                   )}
-                  {isRepairFormReadOnly && (invoice.fileName || invoice.invoiceFile?.name) && (
+                  {invoiceReadOnly && (invoice.fileName || invoice.invoiceFile?.name) && (
                     <div className="readonly-file-row">
                       <strong>Invoice file</strong>
                       <span>{invoice.fileName || invoice.invoiceFile?.name}</span>
@@ -1342,7 +1386,7 @@ function DrivewiseAdminApp() {
                   />
                 )}
               </div>
-            ))}
+            )})}
           </div>
           </>}
           {!isRepairFormReadOnly && (
@@ -1351,7 +1395,7 @@ function DrivewiseAdminApp() {
               <button className="secondary-action" onClick={addInvoice} type="button">
                 Add another invoice
               </button>}
-              <button className="primary-action admin-save" type="submit" disabled={repairSaving}>{repairSaving?'Saving…':isNewVehicleRequest?'Save and share with mechanic':'Save repair record'}</button>
+              <button className="primary-action admin-save" type="submit" disabled={repairSaving}>{repairSaving?'Saving…':isNewVehicleRequest?'Save and share with mechanic':repairForm.correctionOpen?'Save corrections and close':'Save repair record'}</button>
             </div>
           )}
         </form>
@@ -1550,9 +1594,7 @@ function DrivewiseAdminApp() {
                 <button className="secondary-action" onClick={printStatementWithInvoices} type="button">
                   Print statement list with invoices
                 </button>
-                <button className="secondary-action" onClick={completeStatementInvoices} type="button">
-                  Mark complete
-                </button>
+                {canManageDrivewiseAccounting&&<div className="statement-close-controls"><label>Statement date (applies to all selected invoices)<input type="date" value={statementDate} onChange={event=>setStatementDate(event.target.value)} required disabled={statementSaving}/></label><button className="primary-action" onClick={completeStatementInvoices} type="button" disabled={statementSaving||!statementDate}>{statementSaving?'Closing…':'Close selected invoices'}</button></div>}
               </div>
               <table className="schedule-table">
                 <thead>
@@ -1630,16 +1672,10 @@ function DrivewiseAdminApp() {
                         />
                       </label>
                     )}
+                    {canManageDrivewiseAccounting&&!invoice.statementComplete&&<button className="text-action" type="button" onClick={()=>setMoveTarget({kind:'invoice',repairId:invoice.repair.id,item:invoice})}>Move / reclassify</button>}
                   </td>
                   <td className="no-print">
-                    <input
-                      checked={invoice.statementChecked || invoice.statementComplete}
-                      disabled={!canManageDrivewiseAccounting || invoice.statementComplete}
-                      onChange={(event) =>
-                        toggleInvoiceStatus(invoice.repair.id, invoice, { statementChecked: event.target.checked })
-                      }
-                      type="checkbox"
-                    />
+                    <StatementCell invoice={invoice} canAccount={canManageDrivewiseAccounting} formatDate={formatRepairDate} onCheck={checked=>toggleInvoiceStatus(invoice.repair.id,invoice,{statementChecked:checked})} onReverse={()=>setCorrectionTarget({kind:'invoice',repairId:invoice.repair.id,invoiceId:invoice.id,label:`${invoice.vendor} · Invoice ${invoice.invoiceNumber}`})}/>
                   </td>
                 </tr>
               ))}
@@ -1684,21 +1720,23 @@ function DrivewiseAdminApp() {
                       <span className="repair-date-line">Repair date: {formatRepairDate(repair.repairDate)}</span><br />
                       {vehicleLabel(repair)}
                       {repair.payer ? ` - Payer: ${repair.payer}` : ''}
-                      {repair.historicalComplete ? ' - Repair complete' : ''}
-                      {repair.customerAccount?.closedAt ? ' - Closed (customer balance paid)' : ''}
+                      {repair.correctionOpen?' - Reopened for corrections':repair.historicalComplete?' - Repair complete':''}
+                      {!repair.correctionOpen&&repair.customerAccount?.closedAt ? ' - Closed (customer balance paid)' : ''}
                       {repairHasCompletedStatement(repair) ? ' - Statement complete' : ''}
                       {repair.mechanic?.completedAt&&<strong> · Repair completed by {repair.mechanic.mechanicName}</strong>}
-                      {repair.mechanic&&<details><summary>Mechanic updates and attachments</summary>{repair.mechanic.notes.map((entry,i)=><p key={i}>{entry.author}: {entry.body}</p>)}{repair.mechanic.files.map(file=><p key={file.id}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a></p>)}</details>}
+                      {repair.mechanic&&<details><summary>Mechanic updates and attachments</summary><p>Approximate mechanic hours: {repair.mechanic.approxHours??'Not recorded'}</p>{repair.mechanic.notes.map((entry,i)=><p key={i}>{entry.author}: {entry.body}</p>)}{repair.mechanic.files.map(file=><p key={file.id}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a>{file.vendor&&<> · {file.vendor}</>}{file.invoiceNumber&&<> · Invoice {file.invoiceNumber}</>}{(canManageDrivewiseRepairs||canManageDrivewiseAccounting)&&<button className="text-action" type="button" onClick={()=>setMoveTarget({kind:'mechanic',repairId:repair.id,item:file})}>Move / reclassify</button>}</p>)}</details>}
+                      {repair.invoiceTransfers?.length>0&&<details className="invoice-history"><summary>Invoice movement history</summary>{repair.invoiceTransfers.map(entry=><article key={entry.operationId}><strong>{entry.by} · {new Date(entry.at).toLocaleString()}</strong><p>From: {entry.fromLabel}<br/>To: {entry.toLabel}</p><p>Reason: {entry.reason}</p></article>)}</details>}
                     </span>
                     <div>
-                      {canManageDrivewiseRepairs&&!repairIsReadOnly(repair)&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
+                      {canManageDrivewiseRepairs&&!repair.correctionOpen&&(repairIsReadOnly(repair)||vehicleRepairComplete(repair))&&<button className="text-action" type="button" onClick={()=>setCorrectionTarget({kind:'repair',repairId:repair.id,label:`${repair.ownerName} · ${vehicleLabel(repair)}`})}>Reopen for corrections</button>}
+                      {canManageDrivewiseRepairs&&!repair.historicalComplete&&!repairIsReadOnly(repair)&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
                       <button className="text-action" type="button" onClick={()=>revokeMechanicShare(repair.id)}>Revoke link</button></>}
                       {!canManageDrivewiseRepairs || repairIsReadOnly(repair) ? (
                         <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>
                       ) : (
                         <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
                       )}
-                      {canManageDrivewiseRepairs && canDeleteUnlockedDrivewiseRecords && !repairIsReadOnly(repair) && !repair.customerAccount && (
+                      {canManageDrivewiseRepairs && canDeleteUnlockedDrivewiseRecords && !repairIsReadOnly(repair) && !repair.customerAccount && !repair.historicalComplete && !repair.correctionHistory?.length && !repair.invoices?.some(i=>i.statementHistory?.length) && !repair.invoiceTransfers?.length && (
                         <button
                           className="text-action"
                           onClick={() => deleteRepair(repair.id, { confirm: true })}
@@ -1772,7 +1810,7 @@ function DrivewiseAdminApp() {
                       )}
                     </td>
                     <td>
-                      {canDeleteUnlockedDrivewiseRecords && !repairHasCompletedStatement(record) && (
+                      {canDeleteUnlockedDrivewiseRecords && !repairHasCompletedStatement(record) && !record.invoices?.some(i=>i.statementHistory?.length) && !record.invoiceTransfers?.length && (
                         <button
                           className="text-action"
                           onClick={() => deleteRepair(record.id, { confirm: true, label: 'shop supply invoice' })}
@@ -1783,6 +1821,7 @@ function DrivewiseAdminApp() {
                       )}
                       {!canDeleteUnlockedDrivewiseRecords && !repairHasCompletedStatement(record) && 'View only'}
                       {repairHasCompletedStatement(record) && 'Locked'}
+                      {!repairHasCompletedStatement(record)&&record.invoices?.some(i=>i.statementHistory?.length)&&'History retained'}
                     </td>
                   </tr>
               ))}
@@ -1946,6 +1985,7 @@ function adminRoleLabel(accessLevel) {
 
 function App() {
   const [mechanicToken]=useState(()=>{const params=new URLSearchParams(window.location.hash.slice(1));const token=params.get('mechanic');if(token){sessionStorage.setItem('drivewise-mechanic-link',token);window.history.replaceState(null,'',window.location.pathname+'#mechanic');return token;}return window.location.hash==='#mechanic'?sessionStorage.getItem('drivewise-mechanic-link'):null;});
+  if(TESTING&&window.location.hash==='#apply')return <CustomerApplication/>
   return mechanicToken?<MechanicPage token={mechanicToken}/>:<DrivewiseAdminApp />
 }
 

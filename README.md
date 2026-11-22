@@ -2,6 +2,8 @@
 
 Downtown Ministries DriveWise vehicle repair, shop supply, invoice and payment application.
 
+**November 22 pilot:** DTM Hub now opens the separate [DriveWise Testing](https://dtm-drivewise-test.web.app) app using unchanged App Access grants. The current live app below retains its data and local logins. See [testing/README.md](testing/README.md) for the new workflow, tester form, isolated deployment and verified data-preservation plan. The public website form remains unchanged during testing.
+
 Live DriveWise admin: https://drivewise.web.app
 GitHub Pages mirror, after repo setup: https://timorningstar.github.io/drivewise/
 

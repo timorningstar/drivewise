@@ -3,7 +3,7 @@ const dollars=cents=>cents===null||cents===undefined?'Not set':new Intl.NumberFo
 const emptyPayment=()=>({id:crypto.randomUUID(),amount:'',date:new Date().toLocaleDateString('en-CA'),receivedFrom:'',reference:''})
 
 export default function CustomerPayments({repairs,role,request,onAccount}) {
-  const choices=repairs.filter(r=>r.recordType!=='shopSupply'&&!r.historicalComplete)
+  const choices=repairs.filter(r=>r.recordType!=='shopSupply'&&(!r.historicalComplete||r.correctionOpen||r.customerAccount))
   const [id,setId]=useState(choices[0]?.id||'')
   const [charge,setCharge]=useState(''),[payment,setPayment]=useState(emptyPayment)
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
@@ -22,7 +22,7 @@ export default function CustomerPayments({repairs,role,request,onAccount}) {
   return <section className="panel">
     <div className="section-heading"><p className="eyebrow">Payments received</p><h2>Customer payments</h2></div>
     <p>Record money received from the vehicle owner or designated payer. Vendor invoices and payments are managed separately in Vendor Invoice View.</p>
-    {!choices.length?<p>No new vehicle repairs are available. Existing historical repairs remain view-only.</p>:<>
+    {!choices.length?<p>No customer repair accounts are available. Historical repairs become available after being reopened for corrections.</p>:<>
       <label>Repair<select value={id} disabled={busy} onChange={e=>{setId(e.target.value);setCharge('');setPayment(emptyPayment());setError('');setNotice('')}}>
         {choices.map(r=><option key={r.id} value={r.id}>{r.repairDate} · {r.ownerName} · {[r.year,r.make,r.model].filter(Boolean).join(' ')}</option>)}
       </select></label>

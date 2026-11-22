@@ -40,8 +40,8 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
       return db.runTransaction(async tx=>{
         const [state,account,work,config]=await Promise.all([tx.get(stateRef()),tx.get(accounts.doc(id)),tx.get(workCollection.doc(id)),tx.get(settings)]);
         const repair=state.data()?.state?.repairs?.find(r=>r.id===id);
-        if(!repair||repair.recordType==='shopSupply'||repair.historicalComplete)fail('Customer payment entry is available for new vehicle repairs only.',409);
-        const result=changeAccount(account.data(),input,actor,work.data()?.completedAt||'');
+        if(!repair||repair.recordType==='shopSupply'||(repair.historicalComplete&&!repair.correctionOpen&&!account.exists))fail('Reopen historical repairs for corrections before creating their customer account.',409);
+        const result=changeAccount(account.data(),input,actor,work.data()?.completedAt||(repair.historicalComplete?'historical-complete':''));
         tx.set(accounts.doc(id),result.account);
         if(result.event)tx.create(outbox.doc(result.event.id),{...result.event,repairId:id,recipients:settingsValue(config),sentAt:null,attempts:0});
         return result.account;

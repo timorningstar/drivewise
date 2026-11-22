@@ -64,7 +64,7 @@ function notificationMessage(event,repair) {
   const title=event.kind==='completion'?'repair completed':event.kind==='payment-reversal'?'customer payment reversed':'customer payment received';
   const text=[`DTM DriveWise ${title}`,`Owner: ${repair.ownerName}`,`Vehicle: ${vehicle}`,`Repair date: ${repair.repairDate}`,`Payer: ${repair.payer||'Not entered'}`,
     '',`Work requested: ${repair.neededRepairs}`,
-    ...(event.kind==='completion'?[`Completed by: ${work.mechanicName||''}`,`Completed: ${work.completedAt||''}`,
+    ...(event.kind==='completion'?[`Completed by: ${work.mechanicName||''}`,`Completed: ${work.completedAt||''}`,`Approximate mechanic hours: ${work.approxHours??'Not recorded'}`,
       ...(work.notes||[]).map(n=>`${n.author}: ${n.body}`),`Attached mechanic files: ${(work.files||[]).map(f=>f.name).join(', ')||'None'}`]:[]),
     ...((repair.invoices||[]).map(i=>`Vendor invoice: ${i.vendor} / ${i.invoiceNumber} / $${Number(i.cost||0).toFixed(2)}`)),
     '',`Agreed customer charge: ${money(account.chargeCents)}`,`Customer payments received: ${money(account.paidCents)}`,`Outstanding customer balance: ${money(account.balanceCents)}`,

@@ -3,6 +3,9 @@ const {createMechanicService} = require("./mechanic");
 const {hubSession} = require("./hub-access");
 const {customerWorkflow} = require('./customer-workflow');
 const {cents:customerCents} = require('./customer-account');
+const {correctionService,preserveInvoiceHistory} = require('./corrections');
+const {invoiceTransferService} = require('./invoice-transfer');
+const {drivewiseMetrics,verifyMetricsCaller} = require('./service-metrics');
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const admin = require("firebase-admin");
 const crypto = require("crypto");
@@ -25,14 +28,16 @@ const adminSessionCollection = db.collection("adminSessions");
 const mechanicWork=db.collection('drivewiseMechanicWork');
 const mechanicLinks=db.collection('drivewiseMechanicLinks');
 const customer=customerWorkflow({db,stateRef,workCollection:mechanicWork});
+const corrections=correctionService({db,stateRef,logChange:logStateChange});
+const moveInvoice=invoiceTransferService({db,stateRef,logChange:logStateChange});
 const mechanic=createMechanicService({
  repo:{link:async key=>(await mechanicLinks.doc(key).get()).data(),work:async id=>(await mechanicWork.doc(id).get()).data(),putLink:(key,value)=>mechanicLinks.doc(key).create(value),mutate:(id,change)=>customer.mutateWork(id,change)},
  readRepair:async id=>(await readState()).repairs.find(r=>r.id===id),
- saveFile:async(id,file)=>{const path=`drivewiseInvoices/${id}/mechanic-${file.id}`;const bucket=await saveInvoiceBufferToStorage(path,file.bytes,file.type);return {id:file.id,name:file.name,type:file.type,path,bucket};},
+ saveFile:async(id,file)=>{const path=`drivewiseInvoices/${id}/mechanic-${file.id}`;const bucket=await saveInvoiceBufferToStorage(path,file.bytes,file.type);return {id:file.id,name:file.name,type:file.type,path,bucket,vendor:file.vendor||'',invoiceNumber:file.invoiceNumber||''};},
  signFile:async(file,expires)=>{const [url]=await storage.bucket(file.bucket).file(file.path).getSignedUrl({action:'read',expires});return url;},
  removeFile:file=>storage.bucket(file.bucket).file(file.path).delete(),
 });
-async function mechanicProgress(){const snapshot=await mechanicWork.get();const result=new Map();for(const row of snapshot.docs){const value=row.data();result.set(row.id,{sharedAt:value.sharedAt||'',completedAt:value.completedAt||'',mechanicName:value.mechanicName||'',notes:value.notes||[],files:await Promise.all((value.files||[]).map(async file=>({id:file.id,name:file.name,url:await signedStorageUrl(file.path,file.bucket)})))});}return result;}
+async function mechanicProgress(){const snapshot=await mechanicWork.get();const result=new Map();for(const row of snapshot.docs){const value=row.data();result.set(row.id,{sharedAt:value.sharedAt||'',completedAt:value.completedAt||'',mechanicName:value.mechanicName||'',approxHours:value.approxHours??null,transferHistory:value.transferHistory||[],notes:value.notes||[],files:await Promise.all((value.files||[]).map(async file=>({id:file.id,name:file.name,vendor:file.vendor||'',invoiceNumber:file.invoiceNumber||'',url:await signedStorageUrl(file.path,file.bucket)})))});}return result;}
 
 
 function defaultState() {
@@ -339,9 +344,11 @@ async function deleteRegularAdmin(request, session) {
 
 async function saveDrivewiseRepair(request, session) {
   const state = await readState();
-  const repair = sanitizeDrivewiseRepair(request.body?.repair || {});
-  assertRepairEditable((state.repairs || []).find(item=>item.id===repair.id));
-  if(repair.id)await customer.assertOpen(repair.id);
+  let repair = sanitizeDrivewiseRepair(request.body?.repair || {});
+  const original=(state.repairs || []).find(item=>item.id===repair.id);
+  assertRepairEditable(original);
+  if(repair.id&&!original?.correctionOpen)await customer.assertOpen(repair.id);
+  repair=preserveInvoiceHistory(repair,original);
   if (repair.recordType === "shopSupply") {
     repair.ownerName = "Shop Supplies";
     repair.vehicleInfo = "Shop Supplies";
@@ -356,7 +363,7 @@ async function saveDrivewiseRepair(request, session) {
   if (repair.recordType === "shopSupply" && !repair.repairDate) {
     return {ok: false, error: "Supply date is required."};
   }
-  if(repair.recordType!=="shopSupply"&&!repair.payer)return {ok:false,error:'Payer is required.'};
+  if(repair.recordType!=="shopSupply"&&!original&&!repair.payer)return {ok:false,error:'Payer is required.'};
   const initialCharge=request.body?.repair?.agreedCharge;
   if(repair.recordType!=="shopSupply"&&initialCharge!==undefined&&initialCharge!==null&&String(initialCharge).trim()!=='')customerCents(initialCharge);
   if ((repair.invoices || []).some((invoice) => clean(invoice.vendor).length === 1)) {
@@ -367,7 +374,7 @@ async function saveDrivewiseRepair(request, session) {
     return {ok: false, error: "Upload an invoice image or PDF for each invoice."};
   }
   const existingIndex = (state.repairs || []).findIndex((item) => item.id === repair.id);
-  if (existingIndex >= 0 && repairHasCompletedStatement(state.repairs[existingIndex])) {
+  if (existingIndex >= 0 && !original.correctionOpen && repairHasCompletedStatement(state.repairs[existingIndex])) {
     return {ok: false, error: "This repair record has completed statement invoices and is view-only."};
   }
 
@@ -382,27 +389,12 @@ async function saveDrivewiseRepair(request, session) {
     await customer.createRepair(repair,session.username,initialCharge,logStateChange);
     return drivewiseState(session);
   }
-
-  if (existingIndex >= 0) {
-    state.repairs[existingIndex] = {
-      ...state.repairs[existingIndex],
-      ...repair,
-      updatedAt: new Date().toISOString(),
-    };
-  } else {
-    state.repairs = [
-      repair,
-      ...(state.repairs || []),
-    ];
+  if(existingIndex>=0){
+    await corrections.saveExisting(repair,request.body?.repair?.revision,initialCharge,session.username);
+    return drivewiseState(session);
   }
 
-  logStateChange(
-    state,
-    session.username,
-    existingIndex >= 0 ? "Update DriveWise record" : "Add DriveWise record",
-    `${session.username} saved ${repair.recordType === "shopSupply" ? "shop supply" : "repair"} record for ${repair.ownerName}.`,
-  );
-  await writeState(state);
+  await corrections.createSupply(repair,session.username);
   return drivewiseState(session);
 }
 
@@ -411,6 +403,7 @@ async function deleteDrivewiseRepair(request, session) {
   const state = await readState();
   const repair = (state.repairs || []).find((item) => item.id === repairId);
   if (!repair) return {ok: false, error: "Repair record was not found."};
+  if(repair.historicalComplete||repair.correctionHistory?.length||repair.invoiceTransfers?.length||repair.invoices?.some(i=>i.statementHistory?.length))throw Object.assign(Error('Records with historical or correction history cannot be deleted.'),{statusCode:409});
   assertRepairEditable(repair);
   await customer.assertDeletable(repairId);
   if (repairHasCompletedStatement(repair)) {
@@ -423,30 +416,7 @@ async function deleteDrivewiseRepair(request, session) {
 }
 
 async function updateDrivewiseInvoiceStatus(request, session) {
-  const repairId = clean(request.body?.repairId);
-  const invoiceId = clean(request.body?.invoiceId);
-  const updates = request.body?.updates || {};
-  const state = await readState();
-  let changed = false;
-  state.repairs = (state.repairs || []).map((repair) => {
-    if (repair.id !== repairId) return repair;
-    return {
-      ...repair,
-      invoices: (repair.invoices || []).map((invoice) => {
-        if (invoice.id !== invoiceId) return invoice;
-        changed = true;
-        return {
-          ...invoice,
-          statementChecked: updates.statementChecked === undefined ? invoice.statementChecked : Boolean(updates.statementChecked),
-          paid: updates.paid === undefined ? invoice.paid : Boolean(updates.paid),
-          paidAt: updates.paid ? new Date().toISOString() : clean(updates.paidAt || invoice.paidAt),
-        };
-      }),
-    };
-  });
-  if (!changed) return {ok: false, error: "Invoice was not found."};
-  logStateChange(state, session.username, "Update DriveWise invoice", `${session.username} updated invoice status.`);
-  await writeState(state);
+  await corrections.updateSelection(clean(request.body?.repairId),clean(request.body?.invoiceId),request.body?.updates||{},session.username);
   return drivewiseState(session);
 }
 
@@ -461,31 +431,11 @@ async function updateDrivewiseInvoiceFile(request, session) {
   }
 
   const state = await readState();
-  let changed = false;
-  try {
-    state.repairs = await Promise.all((state.repairs || []).map(async (repair) => {
-      if (repair.id !== repairId) return repair;
-      return {
-        ...repair,
-        invoices: await Promise.all((repair.invoices || []).map(async (invoice) => {
-          if (invoice.id !== invoiceId) return invoice;
-          changed = true;
-          const [storedInvoice] = await saveDrivewiseInvoiceFiles(repairId, [{
-            ...invoice,
-            fileName,
-            fileContentType,
-            fileData,
-          }]);
-          return storedInvoice;
-        })),
-      };
-    }));
-  } catch (error) {
-    return {ok: false, error: error.message};
-  }
-  if (!changed) return {ok: false, error: "Invoice was not found."};
-  logStateChange(state, session.username, "Upload DriveWise invoice file", `${session.username} uploaded an invoice file.`);
-  await writeState(state);
+  if(state.repairs.find(r=>r.id===repairId)?.invoices?.find(i=>i.id===invoiceId)?.statementComplete)throw Object.assign(Error('Reverse the completed invoice before replacing its attachment.'),{statusCode:409});
+  const repair=state.repairs.find(r=>r.id===repairId),invoice=repair?.invoices?.find(i=>i.id===invoiceId);
+  if(!invoice)return {ok:false,error:'Invoice was not found.'};
+  const [stored]=await saveDrivewiseInvoiceFiles(repairId,[{...invoice,fileName,fileContentType,fileData}]);
+  await corrections.attach(repairId,invoiceId,stored.invoiceFile,session.username);
   return drivewiseState(session);
 }
 
@@ -499,6 +449,8 @@ async function uploadDrivewiseFile(request) {
   if (!repairId || !fileKind || !fileName || !fileContentType || !fileData) {
     return {ok: false, error: "Choose a file to upload."};
   }
+  const existing=(await readState()).repairs.find(r=>r.id===repairId);
+  if(fileKind==='invoice'&&existing?.invoices?.find(i=>i.id===invoiceId)?.statementComplete)throw Object.assign(Error('Reverse the completed invoice before replacing its attachment.'),{statusCode:409});
   try {
     if (fileKind === "notes") {
       const notesFile = await saveDrivewiseNotesFile(repairId, {
@@ -525,30 +477,7 @@ async function uploadDrivewiseFile(request) {
 }
 
 async function completeDrivewiseStatement(request, session) {
-  const selectedInvoices = Array.isArray(request.body?.invoices) ? request.body.invoices : [];
-  const selectedKeys = new Set(selectedInvoices.map((invoice) => `${clean(invoice.repairId)}:${clean(invoice.invoiceId)}`));
-  if (!selectedKeys.size) return {ok: false, error: "Choose at least one invoice to complete."};
-
-  const completedAt = new Date().toISOString();
-  const state = await readState();
-  let completedCount = 0;
-  state.repairs = (state.repairs || []).map((repair) => ({
-    ...repair,
-    invoices: (repair.invoices || []).map((invoice) => {
-      if (!selectedKeys.has(`${repair.id}:${invoice.id}`)) return invoice;
-      completedCount += 1;
-      return {
-        ...invoice,
-        statementChecked: false,
-        statementComplete: true,
-        statementCompletedAt: completedAt,
-        statementCompletedBy: session.username,
-      };
-    }),
-  }));
-  if (!completedCount) return {ok: false, error: "No matching invoices were found."};
-  logStateChange(state, session.username, "Complete DriveWise statement", `${session.username} completed ${completedCount} invoice(s) from a vendor statement.`);
-  await writeState(state);
+  await corrections.close(request.body||{},session.username);
   return drivewiseState(session);
 }
 
@@ -764,7 +693,7 @@ async function saveDrivewiseInvoiceFiles(repairId, invoices) {
     const extension = invoice.fileContentType === "application/pdf"
       ? "pdf"
       : invoice.fileContentType === "image/png" ? "png" : "jpg";
-    const storagePath = `drivewiseInvoices/${repairId}/${invoice.id || `invoice-${index + 1}`}.${extension}`;
+    const storagePath = `drivewiseInvoices/${repairId}/${invoice.id || `invoice-${index + 1}`}-${crypto.randomUUID()}.${extension}`;
     const bucketName = await saveInvoiceBufferToStorage(storagePath, buffer, invoice.fileContentType);
     const storedInvoice = {...invoice};
     delete storedInvoice.fileData;
@@ -849,6 +778,27 @@ function routePath(request) {
 exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:120}, async (request, response) => {
   try {
     const path = routePath(request);
+    if(request.method==='GET'&&path==='/drivewise-service-metrics'){
+      const token=request.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
+      if(!await verifyMetricsCaller(token)){sendJson(response,403,{error:'DTM reporting service identity required.'});return;}
+      const [state,work]=await Promise.all([readState(),mechanicWork.get()]);
+      sendJson(response,200,drivewiseMetrics(state.repairs,new Map(work.docs.map(doc=>[doc.id,doc.data()])),request.query.from,request.query.through));return;
+    }
+    if(request.method==='POST'&&path==='/drivewise-move-invoice'){
+      const session=await requireAdmin(request,['full','admin','schedule','accounting']);
+      if(request.body?.kind==='invoice'&&session.role==='schedule')throw Object.assign(Error('Accounting access is required to move an accounting invoice.'),{statusCode:403});
+      await moveInvoice(request.body||{},session.username);sendJson(response,200,await drivewiseState(session));return;
+    }
+    if(request.method==='POST'&&path==='/drivewise-reopen-repair'){
+      const session=await requireAdmin(request,['full','admin','schedule']);
+      await corrections.reopen(clean(request.body?.repairId),request.body||{},session.username);
+      sendJson(response,200,await drivewiseState(session));return;
+    }
+    if(request.method==='POST'&&path==='/drivewise-reverse-invoice'){
+      const session=await requireAdmin(request,['full','admin','accounting']);
+      await corrections.reverse(clean(request.body?.repairId),clean(request.body?.invoiceId),request.body||{},session.username);
+      sendJson(response,200,await drivewiseState(session));return;
+    }
     if(request.method==='POST'&&['/mechanic/view','/mechanic/update','/mechanic/upload'].includes(path)){
       if(request.get('origin')!=='https://drivewise.web.app'){sendJson(response,403,{error:'Open the mechanic link directly.'});return;}
       const data=request.body||{};const result=path==='/mechanic/view'?await mechanic.view(data.token):path==='/mechanic/update'?await mechanic.update(data.token,data):await mechanic.upload(data.token,data);

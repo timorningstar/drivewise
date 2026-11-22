@@ -947,3 +947,26 @@ dd {
   .drivewise-workspace .admin-shell { padding:0 15px 40px; }
 }
 @media print { .dw-dashboard-header { display:none!important; } }
+.statement-close-controls { display:grid; gap:8px; min-width:230px; }
+.statement-close-controls label { display:grid; gap:6px; font-size:14px; }
+.statement-date { display:block; margin-bottom:6px; white-space:nowrap; }
+.invoice-history { font-size:13px; margin:8px 0; }
+.invoice-history summary { cursor:pointer; color:#1f5276; font-weight:650; }
+.invoice-history article { border-top:1px solid #dbe3eb; padding:9px 0; min-width:180px; }
+.invoice-history p { margin:5px 0; line-height:1.4; }
+.drivewise-repair-row>div { flex-wrap:wrap; justify-content:flex-end; }
+.mechanic-share form { display:grid; gap:14px; margin-top:16px; }
+.mechanic-share form label { display:grid; gap:7px; }
+.mechanic-share p { line-height:1.5; }
+.testing-banner{padding:14px 18px;background:#fff7dc;border:1px solid #d6b653;border-radius:8px;color:#593e06;margin:14px 0}
+.testing-banner p{margin:.4rem 0 0}
+.workflow-columns{display:grid;grid-template-columns:minmax(220px,30%) 1fr;gap:22px;margin-top:20px}
+.workflow-choice{display:flex;flex-direction:column;text-align:left;gap:5px;background:white;border:1px solid #d3dfeb;border-radius:8px;padding:14px;width:100%;margin:0 0 10px;color:#173750}
+.workflow-choice.selected{border:2px solid #173750;background:#edf4f9}
+.workflow-choice small{font-size:14px}
+.workflow-detail details{padding:15px 0;border-top:1px solid #d3dfeb}
+.workflow-detail summary{font-weight:bold;cursor:pointer;color:#173750}
+.intake-workflow .header-actions{margin:12px 0}
+.intake-workflow h3{margin-top:12px}
+.application-honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+@media(max-width:760px){.workflow-columns{grid-template-columns:1fr}.workflow-columns aside{max-height:300px;overflow:auto}}

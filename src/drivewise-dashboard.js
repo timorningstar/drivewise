@@ -1,4 +1,5 @@
 export function vehicleRepairComplete(repair) {
+  if(repair.correctionOpen)return false
   return Boolean(repair.historicalComplete||repair.mechanic?.completedAt||repair.customerAccount?.closedAt)
 }
 export function dashboardTotals(repairs) {
