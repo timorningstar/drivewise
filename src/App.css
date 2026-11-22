@@ -970,3 +970,5 @@ dd {
 .intake-workflow h3{margin-top:12px}
 .application-honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
 @media(max-width:760px){.workflow-columns{grid-template-columns:1fr}.workflow-columns aside{max-height:300px;overflow:auto}}
+
+.dw-test-stats{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}

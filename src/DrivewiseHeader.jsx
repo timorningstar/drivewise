@@ -12,17 +12,18 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
     </div></div>
     <div className="dw-shell">
       <div className="dw-intro"><div><h1>DriveWise{TESTING?' Testing':''}</h1><p>{canView?'Submit, share, and track vehicle repairs.':data.role==='recovery'?'Recover the full-admin account without opening DriveWise records.':'Sign in to manage vehicle repairs.'}</p></div>
-        {canRepair&&<button className="primary-action dw-new" type="button" onClick={supply?onNewSupply:onNewRepair}>{supply?'+ New shop supplies':'+ New repair'}</button>}
+        {canRepair&&<button className="primary-action dw-new" type="button" onClick={supply?onNewSupply:onNewRepair}>{supply?'+ New shop supplies':TESTING?'+ New request':'+ New repair'}</button>}
       </div>
       {canView&&<>
-        <div className="dw-stats" aria-label="DriveWise summary">
-          <button type="button" className="dw-stat" onClick={()=>onRepairs('open')}><small>Open repairs</small><strong>{totals.open}</strong></button>
+        <div className={TESTING?"dw-stats dw-test-stats":"dw-stats"} aria-label="DriveWise summary">
+          {TESTING&&<button type="button" className="dw-stat" onClick={()=>onView('workflow')}><small>Pending requests / diagnostics</small><strong>{totals.pending}</strong></button>}
+          <button type="button" className="dw-stat" onClick={()=>onRepairs('open')}><small>{TESTING?'Live repairs':'Open repairs'}</small><strong>{totals.open}</strong></button>
           <button type="button" className="dw-stat" onClick={()=>onRepairs('completed')}><small>Completed repairs</small><strong>{totals.completed}</strong></button>
           <button type="button" className="dw-stat" onClick={()=>onView('customerPayments')}><small>Customer balances due</small><strong>{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(totals.balanceCents/100)}</strong></button>
           <button type="button" className="dw-stat" onClick={onInvoices}><small>Unchecked invoices</small><strong>{totals.unchecked}</strong></button>
         </div>
         <nav className="dw-tabs" aria-label="DriveWise navigation">
-          {TESTING&&tab('Applications and diagnostics','workflow')}{tab('Open repairs','repairs','open')}{tab('Completed','repairs','completed')}{tab('All vehicle records','repairs','all')}{tab('Shop supplies','supplyRecords')}{tab('Vendor invoices','invoices')}{tab('Customer payments','customerPayments')}
+          {TESTING&&tab('Pending requests and diagnostics','workflow')}{tab(TESTING?'Live repairs':'Open repairs','repairs','open')}{tab('Completed','repairs','completed')}{tab('All vehicle records','repairs','all')}{tab('Shop supplies','supplyRecords')}{tab('Vendor invoices','invoices')}{tab('Customer payments','customerPayments')}
           {!TESTING&&data.role==='full'&&tab('Notifications','notifications')}{data.role==='full'&&canLegacyAdmin&&tab('Admin','admin')}
         </nav>
       </>}

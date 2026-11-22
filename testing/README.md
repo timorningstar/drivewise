@@ -13,12 +13,12 @@ The public downtownmin.org website form is unchanged at Tim's explicit direction
 
 ## Staff workflow
 
-1. Review **Applications and diagnostics**. A website application or staff-created application creates a pending request, emails an application copy to `carapp@downtownmin.org`, and notifies `carrepair@downtownmin.org`.
-2. Contact the customer offline. Select the request and record the agreed Monday diagnostic date and **3:30, 3:50 or 4:10 PM**, Indiana local time. The app does not book appointments for the customer. Staff must coordinate slot capacity offline.
+1. Review **Pending requests and diagnostics**. A website application or staff-created application creates a pending request, emails an application copy to `carapp@downtownmin.org`, and notifies `carrepair@downtownmin.org`.
+2. Save the staff eligibility decision first. A not-eligible decision requires a reason and retains the request/history. Eligible requests remain pending until an appointment is entered. Contact the customer offline. Select the request and record the agreed Monday diagnostic date and **3:30, 3:50 or 4:10 PM**, Indiana local time. The app does not book appointments for the customer. Staff must coordinate slot capacity offline.
 3. Each Friday at **4:00 PM Indiana time**, the app queues one email listing the coming Monday's names and times, with a printable diagnostic PDF containing the demographics, repair request, and writing lines for diagnosis and parts. During testing, Stephanie's recipient is **t1@downtownmin.org**. No email is generated for an empty appointment list. Manual send is available in Workflow settings; duplicate sends for the same Monday are prevented.
 4. Todd/Stephanie emails the completed PDF to carrepair. Staff records the diagnostic notes and parts in the app; incoming email/PDF extraction is not automated.
 5. Open **Customer payments** and set the agreed charge, including an explicit `0.00` when nothing is owed. Record full or partial receipts when received. An agreed cost is mandatory for live mechanic assignment; receiving payment is optional. Payments and reversals notify Accounting and preserve history.
-6. Choose an active mechanic and select **Make live and email mechanic**. Assignment, the new link, and its durable email event commit together. The mechanic receives the one-repair phone link automatically. Reassigning/reissuing replaces the former link.
+6. After eligibility review, diagnostic appointment and diagnostic results are recorded, choose an active mechanic and select **Make live and email mechanic**. Assignment, the new link, and its durable email event commit together. The mechanic receives the one-repair phone link automatically. Reassigning/reissuing replaces the former link.
 7. The mechanic needs no account. They can save notes/hours, take receipt photos, upload multiple images/PDFs, and mark complete with their name. Upload selected files before completion. The link expires after 30 days **or immediately on completion**. A completion acknowledgment is shown, and later visits are denied.
 8. If fixed during diagnostics, staff can enter the maintenance person's name, hours and notes and complete directly. Charge entry is still required. Completion sends details to carrepair; work completion and customer balance closure remain separate.
 
@@ -28,7 +28,7 @@ Existing vehicle/supply records, invoices, statement dates, double-confirmed ver
 
 The shared `drivewise` App Access directory is authoritative. No user grants were changed. Full Admin manages workflow settings/mechanics and Hub access; Repairs-only users enter/manage repairs; Accounting users retain authorized record/invoice/payment access without repair creation or configuration. Both permissions may be combined in Hub. Every API request checks the current grant.
 
-Full Admin: **Applications and diagnostics → Workflow settings** manages mechanic names/emails and application, repair, accounting and diagnostic recipients. Initial mechanic: Tim Morningstar, `tim@tjmstar.com`.
+Full Admin: **Pending requests and diagnostics → Workflow settings** manages mechanic names/emails and application, repair, accounting and diagnostic recipients. Initial mechanic: Tim Morningstar, `tim@tjmstar.com`.
 
 **Only Stephanie's diagnostic recipient is redirected to T1.** Other configured addresses are real recipients by Tim's instruction: carapp, carrepair, accounting and the selected mechanic. Every test email subject identifies **DTM DriveWise TEST**. A 15-minute scheduled retry retains failed delivery events. Public form anti-abuse checks include expiring, IP-bound submission challenges, rate limiting and a honeypot. Staff entry requires sign-in.
 
@@ -55,3 +55,5 @@ Before the rebuild, the live source was captured into a protected encrypted snap
 The live app continues receiving real work. At cutover, capture a fresh consistent snapshot, rehearse schema conversion/restoration into a restricted destination, reconcile all newer live records/files, preserve historical completion/invoice/payment/audit fields, discard test transactions separately, and then switch Hub/website routing. Do not fabricate old email, class-attendance, hours or payment data, or send retrospective notifications. Keep the old deployment and rollback copy until reconciliation passes. Test data is intentionally excluded from production Program Metrics.
 
 The existing central Housing/Work Orders/Programs backup screen does not imply coverage of the separate DriveWise projects. Scheduled DriveWise backup coverage remains separate work; the completed rebuild snapshot is a verified point-in-time recovery copy.
+
+New applications do not count as live repairs. The dashboard separates Pending requests / diagnostics from Live repairs. Pending emails state PENDING, give the staff review/contact/appointment steps, and open the specific application after shared sign-in. No mechanic link is issued on application submission. The customer application hides Payer; its saved default is the customer name, with later staff correction available.

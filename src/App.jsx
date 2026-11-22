@@ -4,7 +4,7 @@ import CustomerApplication from './CustomerApplication'
 import DrivewiseHeader from './DrivewiseHeader'
 import CorrectionDialog, {InvoiceHistory,StatementCell} from './CorrectionDialog'
 import MoveInvoiceDialog from './MoveInvoiceDialog'
-import {vehicleRepairComplete} from './drivewise-dashboard'
+import {vehicleRepairComplete,vehicleRepairOpen} from './drivewise-dashboard'
 import CustomerPayments, {NotificationSettings} from './CustomerPayments'
 import { useEffect, useState, useRef } from 'react'
 import {onAuthStateChanged,signInWithCustomToken,signOut,setPersistence,browserSessionPersistence} from 'firebase/auth'
@@ -103,6 +103,7 @@ function DrivewiseAdminApp() {
   const [data, setData] = useState(null)
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
   const [activeView, setActiveView] = useState(TESTING?'workflow':'repairs')
+  const [workflowSelection,setWorkflowSelection]=useState('')
   const [repairScope,setRepairScope] = useState('open')
   const [filters, setFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [supplyFilters, setSupplyFilters] = useState({ vendor: 'all', statement: 'unchecked' })
@@ -154,6 +155,8 @@ function DrivewiseAdminApp() {
     const linkedId=new URLSearchParams(window.location.search).get('repair')||sessionStorage.getItem('drivewise-requested-repair')
     const linkedRepair=linkedId&&payload.role!=='recovery'&&payload.repairs?.find(r=>r.id===linkedId)
     if(linkedRepair){sessionStorage.removeItem('drivewise-requested-repair');setRepairForm({...linkedRepair,invoices:linkedRepair.invoices?.length?linkedRepair.invoices:[emptyDrivewiseInvoice()]});setActiveView('entry');window.history.replaceState(null,'',window.location.pathname)}
+    const applicationId=new URLSearchParams(window.location.search).get('application')||sessionStorage.getItem('drivewise-requested-application')
+    if(TESTING&&applicationId&&payload.repairs?.some(r=>r.id===applicationId)){setWorkflowSelection(applicationId);setActiveView('workflow');sessionStorage.removeItem('drivewise-requested-application');window.history.replaceState(null,'',window.location.pathname)}
     setError('')
   }
 
@@ -833,7 +836,7 @@ function DrivewiseAdminApp() {
   const statementInvoices = openInvoices
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
-  const groupedRepairs = groupRepairs(repairs.filter((repair) => repair.recordType!=='shopSupply'&&(repairScope==='all'||(repairScope==='completed'?vehicleRepairComplete(repair):!vehicleRepairComplete(repair)))), repairView)
+  const groupedRepairs = groupRepairs(repairs.filter((repair) => repair.recordType!=='shopSupply'&&(repairScope==='all'||(repairScope==='completed'?vehicleRepairComplete(repair):(TESTING?vehicleRepairOpen(repair):!vehicleRepairComplete(repair))))), repairView)
   const shopSupplyRecords = repairs
     .filter(isShopSupplyRecord)
     .sort((a, b) => (b.repairDate || '').localeCompare(a.repairDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
@@ -1011,7 +1014,7 @@ function DrivewiseAdminApp() {
 
 
       <section className="admin-shell drivewise-shell">
-        {TESTING&&['workflow','newApplication'].includes(activeView)&&<IntakeWorkflow key={activeView} data={data} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))} newRequest={activeView==='newApplication'} onView={setActiveView}/>}
+        {TESTING&&['workflow','newApplication'].includes(activeView)&&<IntakeWorkflow key={activeView} data={data} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))} newRequest={activeView==='newApplication'} initialId={workflowSelection} onView={setActiveView}/>}
         {canViewDrivewiseRecords&&activeView==='customerPayments'&&<CustomerPayments repairs={repairs} role={data.role} request={customerRequest} onAccount={(id,account)=>{
           setData(current=>({...current,repairs:current.repairs.map(r=>r.id===id?{...r,customerAccount:account}:r)}))
           setRepairForm(current=>current.id===id?{...current,customerAccount:account}:current)
@@ -1689,7 +1692,7 @@ function DrivewiseAdminApp() {
           <div className="section-heading admin-heading-row">
             <div>
               <p className="eyebrow">Repairs</p>
-              <h2>{repairScope==='open'?'Open vehicle repairs':repairScope==='completed'?'Completed vehicle repairs':'Vehicle repair records'}</h2>
+              <h2>{repairScope==='open'?(TESTING?'Live vehicle repairs':'Open vehicle repairs'):repairScope==='completed'?'Completed vehicle repairs':'Vehicle repair records'}</h2>
             </div>
             <div className="view-toggle">
               <button
@@ -1709,7 +1712,7 @@ function DrivewiseAdminApp() {
             </div>
           </div>
           <div className="drivewise-repair-list">
-            {groupedRepairs.length===0&&<p className="dw-empty">{repairScope==='open'?'No open vehicle repairs.':repairScope==='completed'?'No completed vehicle repairs.':'No vehicle repairs recorded.'}</p>}
+            {groupedRepairs.length===0&&<p className="dw-empty">{repairScope==='open'?(TESTING?'No live repairs. New applications remain under Pending requests and diagnostics.':'No open vehicle repairs.'):repairScope==='completed'?'No completed vehicle repairs.':'No vehicle repairs recorded.'}</p>}
             {groupedRepairs.map((group) => (
               <section className="repair-group" key={group.label}>
                 <h3>{group.label}</h3>
@@ -1729,7 +1732,7 @@ function DrivewiseAdminApp() {
                     </span>
                     <div>
                       {canManageDrivewiseRepairs&&!repair.correctionOpen&&(repairIsReadOnly(repair)||vehicleRepairComplete(repair))&&<button className="text-action" type="button" onClick={()=>setCorrectionTarget({kind:'repair',repairId:repair.id,label:`${repair.ownerName} · ${vehicleLabel(repair)}`})}>Reopen for corrections</button>}
-                      {canManageDrivewiseRepairs&&!repair.historicalComplete&&!repairIsReadOnly(repair)&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
+                      {canManageDrivewiseRepairs&&!repair.historicalComplete&&!repairIsReadOnly(repair)&&(!TESTING||repair.workflowStatus==='live')&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
                       <button className="text-action" type="button" onClick={()=>revokeMechanicShare(repair.id)}>Revoke link</button></>}
                       {!canManageDrivewiseRepairs || repairIsReadOnly(repair) ? (
                         <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>

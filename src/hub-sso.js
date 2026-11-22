@@ -3,6 +3,8 @@ const base64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-'
 const random = () => base64url(crypto.getRandomValues(new Uint8Array(32)))
 
 export async function handleHubSso({app,signIn,logout}) {
+  const applicationId=new URLSearchParams(window.location.search).get('application')
+  if(app==='drivewise'&&/^[a-zA-Z0-9_-]{1,120}$/.test(applicationId||''))sessionStorage.setItem('drivewise-requested-application',applicationId)
   const requestedRepair=new URLSearchParams(window.location.search).get('repair')
   if(app==='drivewise'&&/^[a-zA-Z0-9_-]{1,120}$/.test(requestedRepair||''))sessionStorage.setItem('drivewise-requested-repair',requestedRepair)
   if (window.location.hash === '#dtm-logout') {

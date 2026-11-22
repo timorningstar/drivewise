@@ -698,7 +698,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
     if(request.method==='GET'&&path==='/workflow/pdf'){
       await requireAdmin(request,['full','admin','schedule','accounting']);response.set('Content-Type','application/pdf').set('Content-Disposition','attachment; filename="DTM-diagnostic.pdf"').send(await workflow.pdf(clean(request.query?.repairId)));return;
     }
-    if(request.method==='POST'&&['/workflow/create','/workflow/edit','/workflow/schedule','/workflow/diagnostic','/workflow/activate'].includes(path)){
+    if(request.method==='POST'&&['/workflow/create','/workflow/edit','/workflow/review','/workflow/schedule','/workflow/diagnostic','/workflow/activate'].includes(path)){
       const session=await requireAdmin(request,['full','admin','schedule']),input=request.body||{},action=path.split('/').pop();
       if(action==='create')await workflow.create(input,session.username);else await workflow[action](clean(input.repairId),input,session.username);
       await workflow.flush(2);sendJson(response,200,await drivewiseState(session));return;
