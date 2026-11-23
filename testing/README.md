@@ -103,3 +103,6 @@ Denied requests with no agreed charge or financial history are excluded from the
 
 
 **All vehicle records** lists actual live/completed repairs and legacy repair history, excluding pending, diagnostic-stage and denied applications. To review a denied application, choose the **Pending Requests** summary box, then **Show → Not eligible / denied**. Select the requester to review the decision/history or reconsider eligibility. Denied applications remain retained; these screen filters do not delete any record.
+
+
+The Pending Requests **Show** filter contains only **Requests and diagnostics in progress**, **Pending requests**, and **Not eligible / denied**. Completed repairs and All applications have been removed from this dropdown. Use the Completed repairs summary box or All vehicle records navigation for actual repair history.
