@@ -15,7 +15,7 @@ export default function DrivewiseSetup({initial,request,onData}) {
  }
  async function digest(e){
   e.preventDefault();const date=new FormData(e.currentTarget).get('date');setBusy(true);setError('');setNotice('')
-  try{const result=await request('/api/workflow/digest',{date});setNotice(`${result.count} appointment(s); ${result.sent||0} email(s) delivered. A duplicate weekly list is not sent.`)}catch(e){setError(e.message)}finally{setBusy(false)}
+  try{const result=await request('/api/workflow/digest',{date});setNotice(`${result.count} appointment(s); ${result.sent||0} email(s) delivered. ${result.queued?'Friday’s automatic email will still be sent.':'This date’s manual list was already queued or sent. Friday’s automatic email is separate.'}`)}catch(e){setError(e.message)}finally{setBusy(false)}
  }
  return <section className="panel drivewise-setup">
   <div className="section-heading"><p className="eyebrow">Full Admin</p><h2>Setup</h2></div>
@@ -50,7 +50,7 @@ export default function DrivewiseSetup({initial,request,onData}) {
    <p>Changes apply to new notifications. Messages already queued retain their original recipients.</p>
    <button className="primary-action" disabled={busy}>{busy?'Saving…':'Save setup'}</button>
   </form>
-  <details><summary>Diagnostic email controls</summary><p>Friday emails run at 4:00 PM Indiana time for the next configured diagnostic day. Save schedule changes before sending a list. Workflow emails pending at last refresh: {initial.pending||0}.</p>
+  <details><summary>Diagnostic email controls</summary><p>Friday emails run at 4:00 PM Indiana time for the next configured diagnostic day. Sending a list manually does not cancel Friday’s automatic email. Save schedule changes before sending a list. Workflow emails pending at last refresh: {initial.pending||0}.</p>
    <form onSubmit={digest}><label>Appointment date for diagnostic email<input name="date" type="date" required disabled={busy}/></label><button disabled={busy}>Send diagnostic list once</button></form>
   </details>
   {error&&<p className="error-message" role="alert">{error}</p>}{notice&&<p className="success-message" role="status">{notice}</p>}

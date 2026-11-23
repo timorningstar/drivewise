@@ -40,7 +40,7 @@ test('diagnostic completion commits notification and ledger closure, rejecting s
 test('Friday digest queues one reviewed Monday list with PDF; declined requests stay out',async()=>{
  const f=fixture();const r=await f.service.create(application(),'Staff');await reviewedAndScheduled(f,r);
  await f.service.digest('2026-11-23');await f.service.digest('2026-11-23');
- const event=f.rows.get('drivewiseWorkflowNotifications/diagnostics-2026-11-23');assert.equal(event.recipients[0],'t1@downtownmin.org');assert.equal(event.repairs.length,1);
+ const event=f.rows.get('drivewiseWorkflowNotifications/diagnostics-manual-2026-11-23');assert.equal(event.recipients[0],'t1@downtownmin.org');assert.equal(event.repairs.length,1);
  const mail=await message(event);assert.match(mail.text,/Sample Customer/);assert.equal(Buffer.from(mail.attachments[0].contentBytes,'base64').subarray(0,5).toString(),'%PDF-');
  const other=await f.service.create(application(),'Staff');await assert.rejects(f.service.review(other.id,{operationId:randomUUID(),revision:other.revision,decision:'not_eligible'},'Staff'),/reason/);
  const declined=await f.service.review(other.id,{operationId:randomUUID(),revision:other.revision,decision:'not_eligible',notes:'Staff determination'},'Staff');assert.equal(declined.workflowStatus,'not_eligible');assert.equal(declined.eligibility.reviewedBy,'Staff');
@@ -102,7 +102,7 @@ test('Setup schedule is authoritative, leaves bookings intact, and older setting
  await assert.rejects(f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-25',time:'15:30'},'Staff'),/Setup/);
  r=await f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-25',time:'14:30'},'Staff');
  assert.equal(r.diagnostic.date,'2026-11-25');assert.equal(r.diagnostic.time,'14:30');
- await f.service.digest('2026-11-25');const email=await message(f.rows.get('drivewiseWorkflowNotifications/diagnostics-2026-11-25'));assert.equal(email.subject,'DTM Car Diagnostic Wednesday');assert(!email.subject.includes('Monday'));
+ await f.service.digest('2026-11-25');const email=await message(f.rows.get('drivewiseWorkflowNotifications/diagnostics-manual-2026-11-25'));assert.equal(email.subject,'DTM Car Diagnostic Wednesday');assert(!email.subject.includes('Monday'));
  const pending=await message(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id));assert.match(pending.text,/configured in Setup/);assert(!pending.text.includes('Monday'));
 });
 
@@ -121,4 +121,25 @@ test('concurrent diagnostic bookings allow one winner, own reschedule is safe, d
 test('diagnostic email subject names weekday and body starts with readable date followed by names and AM/PM times',async()=>{
  const email=await message({id:'sample-format',kind:'digest',date:'2026-11-30',recipients:['sample@example.test'],repairs:[{ownerName:'Sample Customer',diagnostic:{date:'2026-11-30',time:'15:30'}}]});
  assert.equal(email.subject,'DTM Car Diagnostic Monday');assert(email.text.startsWith('Monday, November 30\n\nSample Customer — 3:30 PM'));assert(email.text.includes('TEST ENVIRONMENT'));assert.equal(email.attachments.length,1);
+});
+
+test('early manual digest does not suppress Friday scheduled digest, with separate duplicate protection and current appointments',async()=>{
+ const f=fixture(),target=require('./intake-domain').nextDiagnosticDay(1);
+ let r=await f.service.create(application(),'Staff');r=await f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'eligible'},'Staff');
+ await f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:target,time:'15:30'},'Staff');
+ // Legacy early manual event from before delivery modes must not block Friday.
+ const early=await f.service.digest(target);assert.equal(early.queued,true);assert.equal(early.deliveryMode,'manual');assert.equal((await f.service.digest(target)).queued,false);
+ let added=await f.service.create(application(),'Staff');added=await f.service.review(added.id,{operationId:randomUUID(),revision:added.revision,decision:'eligible'},'Staff');
+ await f.service.schedule(added.id,{operationId:randomUUID(),revision:added.revision,date:target,time:'15:50'},'Staff');
+ f.rows.set('drivewiseWorkflowNotifications/diagnostics-'+target,{kind:'digest',sentAt:'already-sent'});
+ const friday=await f.service.digest();assert.equal(friday.queued,true);assert.equal(friday.deliveryMode,'scheduled');assert.equal(friday.count,2);assert.equal((await f.service.digest()).queued,false);
+ assert.equal(f.rows.get('drivewiseWorkflowNotifications/diagnostics-manual-'+target).repairs.length,1);
+ assert.equal(f.rows.get('drivewiseWorkflowNotifications/diagnostics-scheduled-'+target).repairs.length,2);
+});
+
+test('legacy manual list is not resent by the manual button after rollout',async()=>{
+ const f=fixture();const r=await f.service.create(application(),'Staff');await reviewedAndScheduled(f,r);
+ f.rows.set('drivewiseWorkflowNotifications/diagnostics-2026-11-23',{kind:'digest',sentAt:'already-sent'});
+ assert.equal((await f.service.digest('2026-11-23')).queued,false);
+ assert(!f.rows.has('drivewiseWorkflowNotifications/diagnostics-manual-2026-11-23'));
 });
