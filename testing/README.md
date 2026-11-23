@@ -13,9 +13,9 @@ The public downtownmin.org website form is unchanged at Tim's explicit direction
 
 ## Staff workflow
 
-1. Review **Pending requests and diagnostics**. A website application or staff-created application creates a pending request, emails an application copy to `carapp@downtownmin.org`, and notifies `carrepair@downtownmin.org`.
+1. Review **Pending requests and diagnostics**. A website application or staff-created application creates a pending request and one combined notification to the **Car Repair Requests** recipients configured in Setup.
 2. Save the staff eligibility decision first. A not-eligible decision requires a reason and retains the request/history. Eligible requests remain pending until an appointment is entered. Contact the customer offline. Select the request and record the agreed Monday diagnostic date and **3:30, 3:50 or 4:10 PM**, Indiana local time. The app does not book appointments for the customer. Staff must coordinate slot capacity offline.
-3. Each Friday at **4:00 PM Indiana time**, the app queues one email listing the coming Monday's names and times, with a printable diagnostic PDF containing the demographics, repair request, and writing lines for diagnosis and parts. During testing, Stephanie's recipient is **t1@downtownmin.org**. No email is generated for an empty appointment list. Manual send is available in Workflow settings; duplicate sends for the same Monday are prevented.
+3. Each Friday at **4:00 PM Indiana time**, the app queues one email listing the coming Monday's names and times, with a printable diagnostic PDF containing the demographics, repair request, and writing lines for diagnosis and parts. During testing, Stephanie's recipient is **t1@downtownmin.org**. No email is generated for an empty appointment list. Manual send is available in Setup under Diagnostic email controls; duplicate sends for the same Monday are prevented.
 4. Todd/Stephanie emails the completed PDF to carrepair. Staff records the diagnostic notes and parts in the app; incoming email/PDF extraction is not automated.
 5. Open **Customer payments** and set the agreed charge, including an explicit `0.00` when nothing is owed. Record full or partial receipts when received. An agreed cost is mandatory for live mechanic assignment; receiving payment is optional. Payments and reversals notify Accounting and preserve history.
 6. After eligibility review, diagnostic appointment and diagnostic results are recorded, choose an active mechanic and select **Make live and email mechanic**. Assignment, the new link, and its durable email event commit together. The mechanic receives the one-repair phone link automatically. Reassigning/reissuing replaces the former link.
@@ -28,7 +28,7 @@ Existing vehicle/supply records, invoices, statement dates, double-confirmed ver
 
 The shared `drivewise` App Access directory is authoritative. No user grants were changed. Full Admin manages workflow settings/mechanics and Hub access; Repairs-only users enter/manage repairs; Accounting users retain authorized record/invoice/payment access without repair creation or configuration. Both permissions may be combined in Hub. Every API request checks the current grant.
 
-Full Admin: **Pending requests and diagnostics → Workflow settings** manages mechanic names/emails and application, repair, accounting and diagnostic recipients. Initial mechanic: Tim Morningstar, `tim@tjmstar.com`.
+Full Admin: the main **Setup** menu manages Car Repair Requests (up to three recipients), Accounting, Friday diagnostics, DriveWise contact email and mechanic names/emails. Initial mechanic: Tim Morningstar, `tim@tjmstar.com`.
 
 **Only Stephanie's diagnostic recipient is redirected to T1.** Other configured addresses are real recipients by Tim's instruction: carapp, carrepair, accounting and the selected mechanic. Every test email subject identifies **DTM DriveWise TEST**. A 15-minute scheduled retry retains failed delivery events. Public form anti-abuse checks include expiring, IP-bound submission challenges, rate limiting and a honeypot. Staff entry requires sign-in.
 
@@ -68,3 +68,14 @@ Staff eligibility review separates **Internal eligibility notes** from **Message
 For an already saved decision, review the message and use **Email current decision**. This records an email action without changing eligibility. The app shows the queued destination/time, retains failures for scheduled retry, and prevents duplicates on a submission retry. Test messages continue to carry TEST in their subject. Existing denied records are not automatically emailed when this feature is deployed.
 
 To reconsider, change **Staff decision** to **Eligible — arrange diagnostics**, edit the customer message or disable email if appropriate, and **Save eligibility decision**. The request returns to eligible/pending so staff can arrange a new diagnostic appointment. An old diagnostic appointment is cancelled rather than silently reactivated. Decision notes, previous decisions and prior appointment references remain in history. Superseded queued decision messages are cancelled instead of delivering an obsolete denial after reconsideration. Diagnostic digests also omit requests denied after the email was queued.
+
+
+## Setup and Car Repair Requests (November 23)
+
+The pictured yellow TESTING information box has been removed from the staff workflow. **Setup** is a main navigation item for Full Admins; it replaces the old inline Workflow settings button. Other users do not see it, and the server retains its Full Admin-only settings guard.
+
+**Car Repair Requests** has three email slots (first required, two optional). Use individual recipients to manage membership directly in the app, without updating an Exchange distribution list. Addresses are validated, normalized and deduplicated; more than three is rejected. New customer applications now create one pending-request event addressed to this group, replacing the separate application-copy and pending emails. Completed repair notices use the same group. Accounting payment notices, Friday diagnostic list and DriveWise customer contact email are configured separately. Mechanic assignments still go directly to the selected mechanic.
+
+Tim elected to retain the existing carapp and carrepair list addresses initially; no individual member addresses were supplied. Setup reads the previous settings into those two slots without discarding custom recipients or mechanics. Replace them with up to three individual emails and choose **Save setup** when ready. This changes the test app's future delivery destinations; it does not modify or delete any Microsoft Exchange distribution list or change the current public website.
+
+Existing queued emails retain the recipient snapshot with which they were created. Changing Setup does not resend old requests or redirect already queued messages. Recipient settings and mechanic records are stored in the existing protected test workflow settings document. No request, eligibility decision, balance, payment or shared login permission changes when saving Setup.

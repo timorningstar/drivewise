@@ -1,5 +1,6 @@
 import MechanicPage from './MechanicPage'
 import IntakeWorkflow from './IntakeWorkflow'
+import DrivewiseSetup from './DrivewiseSetup'
 import CustomerApplication from './CustomerApplication'
 import DrivewiseHeader from './DrivewiseHeader'
 import CorrectionDialog, {InvoiceHistory,StatementCell} from './CorrectionDialog'
@@ -1015,6 +1016,7 @@ function DrivewiseAdminApp() {
 
       <section className="admin-shell drivewise-shell">
         {TESTING&&['workflow','newApplication'].includes(activeView)&&<IntakeWorkflow key={activeView} data={data} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))} newRequest={activeView==='newApplication'} initialId={workflowSelection} onView={setActiveView}/>}
+        {TESTING&&data.role==='full'&&activeView==='setup'&&<DrivewiseSetup initial={data.workflow} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))}/>}
         {canViewDrivewiseRecords&&activeView==='customerPayments'&&<CustomerPayments repairs={repairs} role={data.role} request={customerRequest} onAccount={(id,account)=>{
           setData(current=>({...current,repairs:current.repairs.map(r=>r.id===id?{...r,customerAccount:account}:r)}))
           setRepairForm(current=>current.id===id?{...current,customerAccount:account}:current)

@@ -24,7 +24,7 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
         </div>
         <nav className="dw-tabs" aria-label="DriveWise navigation">
           {TESTING&&tab('Pending requests and diagnostics','workflow')}{tab(TESTING?'Live repairs':'Open repairs','repairs','open')}{tab('Completed','repairs','completed')}{tab('All vehicle records','repairs','all')}{tab('Shop supplies','supplyRecords')}{tab('Vendor invoices','invoices')}{tab('Customer payments','customerPayments')}
-          {!TESTING&&data.role==='full'&&tab('Notifications','notifications')}{data.role==='full'&&canLegacyAdmin&&tab('Admin','admin')}
+          {TESTING&&data.role==='full'&&tab('Setup','setup')}{!TESTING&&data.role==='full'&&tab('Notifications','notifications')}{data.role==='full'&&canLegacyAdmin&&tab('Admin','admin')}
         </nav>
       </>}
     </div>

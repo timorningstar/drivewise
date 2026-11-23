@@ -972,3 +972,5 @@ dd {
 @media(max-width:760px){.workflow-columns{grid-template-columns:1fr}.workflow-columns aside{max-height:300px;overflow:auto}}
 
 .dw-test-stats{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+
+.drivewise-setup fieldset{border:1px solid #d6e1eb;border-radius:8px;padding:18px;margin:18px 0}.drivewise-setup legend{font-weight:700;color:#173750;padding:0 6px}.drivewise-setup small{font-size:14px;font-weight:400}.drivewise-setup details{margin:24px 0 0;padding-top:16px;border-top:1px solid #d6e1eb}.drivewise-setup summary{font-weight:700;cursor:pointer}

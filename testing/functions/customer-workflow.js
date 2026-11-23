@@ -1,3 +1,4 @@
+const {readSettings}=require('./notification-settings');
 const {changeAccount,summarize,notificationMessage,cents}=require('./customer-account');
 const endpoint='https://dtmapp.web.app/api/dtm-access/drivewise/mail';
 const defaultRecipients=['carrepair@downtownmin.org'];
@@ -43,7 +44,7 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
         if(!repair||repair.recordType==='shopSupply'||(repair.historicalComplete&&!repair.correctionOpen&&!account.exists))fail('Reopen historical repairs for corrections before creating their customer account.',409);
         const result=changeAccount(account.data(),input,actor,work.data()?.completedAt||(repair.historicalComplete?'historical-complete':''));
         tx.set(accounts.doc(id),result.account);
-        if(result.event)tx.create(outbox.doc(result.event.id),{...result.event,repairId:id,recipients:[config.data()?.accountingEmail||"accounting@downtownmin.org"],sentAt:null,attempts:0});
+        if(result.event)tx.create(outbox.doc(result.event.id),{...result.event,repairId:id,recipients:[readSettings(config.data()).accountingEmail],sentAt:null,attempts:0});
         return result.account;
       });
     },
@@ -59,7 +60,7 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
           const summary=summarize(account.data(),next.completedAt);
           tx.set(accounts.doc(id),summary);
           const event={id:'completion-'+id,kind:'completion',repairId:id,createdAt:new Date().toISOString(),workSnapshot:next,accountSnapshot:summary,
-            recipients:[config.data()?.repairEmail||"carrepair@downtownmin.org"],sentAt:null,attempts:0};
+            recipients:readSettings(config.data()).carRepairRequestEmails,sentAt:null,attempts:0};
           tx.create(outbox.doc(event.id),event);
         }
         return next;

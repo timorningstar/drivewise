@@ -58,3 +58,10 @@ test('new request requires payer and rejects invalid agreed charge before writin
  await f.workflow.createRepair({id:'pending-charge',payer:'Sample'},'Staff','',()=>{});
  assert.equal((await f.workflow.snapshot()).accounts['pending-charge'],undefined);
 });
+
+
+test('mechanic completion uses the Setup Car Repair Requests group while payments keep the Accounting destination',async()=>{
+ const f=fixture();f.records.set('drivewiseSettings/workflow',{carRepairRequestEmails:['repair1@example.test','repair2@example.test','repair3@example.test'],accountingEmail:'finance@example.test',diagnosticEmail:'diag@example.test',contactEmail:'contact@example.test',mechanics:[]});
+ await f.workflow.mutateAccount('r1',{action:'charge',amount:'25'},'Staff');const payment=pay();await f.workflow.mutateAccount('r1',payment,'Staff');await f.workflow.mutateWork('r1',work=>({...work,completedAt:'complete',mechanicName:'Mechanic'}));
+ assert.deepEqual(f.records.get('drivewiseNotifications/completion-r1').recipients,['repair1@example.test','repair2@example.test','repair3@example.test']);assert.deepEqual(f.records.get('drivewiseNotifications/payment-'+payment.id).recipients,['finance@example.test']);
+});
