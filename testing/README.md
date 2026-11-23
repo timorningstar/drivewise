@@ -116,3 +116,6 @@ Open the **Completed repairs** summary box and use **Date Range → From / Throu
 ## In Diagnostics summary box (November 23)
 
 **In Diagnostics** counts requests with a scheduled diagnostic appointment that have not completed diagnostics, been denied or completed the repair. Click the box to open the request workflow filtered to **In Diagnostics**. The same choice is available in Show. After staff saves diagnostic results, the request moves to awaiting repair decision and leaves this count. Pending Requests remains the default opening view and its combined in-progress view still includes diagnostic requests.
+
+
+Staff application entry uses the **+ New request** button at the top of DriveWise. The duplicate **+ New application** bar inside Pending Requests has been removed. The **Customer application form** link remains available for customer self-entry without sign-in.
