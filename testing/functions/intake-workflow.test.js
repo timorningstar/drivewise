@@ -179,3 +179,12 @@ test('mechanic assignment email has spaced work link without staff-review link o
  assert(assignment.text.includes('Repair need: Sample repair\n\nMechanic work order: https://example.test/#mechanic=sample'));
  const pending=await message({id:'sample-pending',kind:'pending',repair,recipients:['staff@example.test']});assert(pending.text.includes('Review this pending'));assert(pending.text.includes('PRIVATE CLASS'));
 });
+
+test('mechanic assignment reply-to snapshots every Car Repair Requests member, separate from mechanic recipient',async()=>{
+ const f=fixture();await f.service.settings({...await f.service.config(),carRepairRequestEmails:['repair1@example.test','repair2@example.test','repair3@example.test']},'Admin');
+ let r=await f.service.create(application(),'Staff');r=await reviewedAndScheduled(f,r);r=await f.service.diagnostic(r.id,{operationId:randomUUID(),revision:r.revision,notes:'Repair needed'},'Staff');f.rows.set('drivewiseCustomerAccounts/'+r.id,{chargeCents:0,payments:[]});
+ const operationId=randomUUID();await f.service.activate(r.id,{operationId,revision:r.revision,mechanicId:'tim-morningstar'},'Staff');
+ const event=f.rows.get('drivewiseWorkflowNotifications/assignment-'+operationId),content=await message(event);assert.deepEqual(content.replyTo,['repair1@example.test','repair2@example.test','repair3@example.test']);assert.deepEqual(content.recipients,['tim@tjmstar.com']);
+ await f.service.settings({...await f.service.config(),carRepairRequestEmails:['new@example.test']},'Admin');assert.deepEqual((await message(event)).replyTo,content.replyTo);
+ const pending=await message(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id));assert.equal(pending.replyTo,undefined);
+});

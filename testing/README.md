@@ -169,3 +169,8 @@ For uploads choose **Vendor invoice** or **Repair photo**. Invoice images/PDFs r
 ## Customer payments on completed repair records (November 23)
 
 Opening a repair record now shows **Customer payment** near the top: Agreed charge, Customer paid, Balance due and Paid in full when applicable. Expand **Customer payment history** for payment date, received-from name, amount, reference and any reversal reason. Reversed payments remain visible in history but do not count toward Customer paid. Vehicle record lists also show Customer paid/Balance due. The summary reads the existing customer ledger; viewing a completed order never records or changes a payment. Records with no customer ledger are left without a fabricated payment status.
+
+
+## Mechanic email replies (November 23)
+
+Mechanic assignment emails continue to come from **notification@downtownmin.org**. Their **Reply-To** is every address in **Setup → Car Repair Requests** (up to three). New assignments snapshot the current configured list; later Setup changes affect future assignments. Pending unsent older assignments without a snapshot use the current list at their next delivery attempt. Already sent messages cannot have their Reply-To changed by an app update. Replying to a newly sent mechanic email directs the reply to that list instead of the notification mailbox. No mailbox forwarding rule or additional mailbox access is required by the app change. Staff customer/payment/diagnostic message routing is unchanged.
