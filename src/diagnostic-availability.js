@@ -7,6 +7,7 @@ export function diagnosticAvailability(repairs,settings,repairId,now=new Date())
  const day=settings.diagnosticDay??1,times=[...(settings.diagnosticTimes||['15:30','15:50','16:10'])].sort();
  const start=new Date(today+'T12:00:00Z');start.setUTCDate(start.getUTCDate()+(day-start.getUTCDay()+7)%7);
  const choices=[];
+ if(own?.date<today&&new Date(own.date+'T12:00:00Z').getUTCDay()===day&&times.includes(own.time)&&!booked.has(own.date+' '+own.time))choices.push({date:own.date,times:[own.time]});
  for(let week=0;week<104;week++){
   const date=start.toISOString().slice(0,10);
   const available=times.filter(time=>!booked.has(date+' '+time)&&(date>today||time>currentTime||(own?.date===date&&own.time===time)));

@@ -990,3 +990,17 @@ dd {
 .repair-date-range legend { font-weight:700; padding:0 6px; }
 .repair-date-range .field-grid { align-items:end; }
 .repair-date-range small { display:block; margin-top:10px; color:#55687c; }
+
+.workflow-progress { background:#eef4f8; border:1px solid #cbd9e5; border-radius:9px; padding:16px; margin:18px 0; }
+.workflow-progress p { margin:8px 0; font-size:14px; }
+.workflow-progress ol { display:flex; flex-wrap:wrap; gap:8px; list-style:none; margin:12px 0 0; padding:0; }
+.workflow-progress li { border:1px solid #d1dbe3; padding:7px 10px; border-radius:6px; background:#fff; font-size:13px; }
+.workflow-step { border:1px solid #d6e1eb!important; border-radius:8px; padding:12px!important; margin:12px 0!important; }
+.workflow-step.step-next { border:2px solid #bb8b36!important; background:#fff9e9; }
+.workflow-step.step-done { background:#f0f3f5; }
+.workflow-step.step-done[open] { background:#fff; }
+.workflow-step summary { display:list-item; font-weight:700; cursor:pointer; }
+.step-badge { float:right; font-size:12px; background:#e4eaf0; padding:3px 8px; border-radius:12px; margin-left:10px; }
+.step-next .step-badge,.workflow-progress .step-next { background:#ffe8ab; color:#533b0b; }
+.workflow-option { display:flex!important; align-items:center; gap:10px; padding:12px; background:#eef4f8; border-radius:6px; margin:12px 0; }
+.workflow-option input { width:auto!important; }

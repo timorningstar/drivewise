@@ -143,3 +143,31 @@ test('legacy manual list is not resent by the manual button after rollout',async
  assert.equal((await f.service.digest('2026-11-23')).queued,false);
  assert(!f.rows.has('drivewiseWorkflowNotifications/diagnostics-manual-2026-11-23'));
 });
+
+test('diagnostic completion atomically records freeform repairer, notes, parts, payer and charge, with no mechanic assignment',async()=>{
+ for(const chargeAmount of ['0','35.25']){
+  const f=fixture();let r=await f.service.create(application(),'Staff');r=await reviewedAndScheduled(f,r);
+  const input={operationId:randomUUID(),revision:r.revision,name:'Any repair volunteer',approxHours:'0.75',notes:'Repaired during appointment',note:'Repair complete',partsOrdered:'Clamp',chargeAmount,payer:chargeAmount==='0'?'':'Sponsor Sample'};
+  const done=await f.service.completeDiagnostic(r.id,input,'Staff');assert.equal(done.workflowStatus,'complete');assert.equal(done.diagnosticNotes,input.notes);assert.equal(done.partsOrdered,'Clamp');
+  assert.equal(done.payer,chargeAmount==='0'?r.payer:'Sponsor Sample');
+  const account=f.rows.get('drivewiseCustomerAccounts/'+r.id);assert.equal(account.chargeCents,chargeAmount==='0'?0:3525);assert.equal(Boolean(account.closedAt),chargeAmount==='0');assert.equal(account.payments.length,0);
+  assert.equal(f.rows.get('drivewiseMechanicWork/'+r.id).mechanicName,'Any repair volunteer');assert.equal([...f.rows.values()].filter(v=>v.kind==='completion').length,1);assert.equal([...f.rows.values()].filter(v=>v.kind==='assignment').length,0);
+  await f.service.completeDiagnostic(r.id,input,'Staff');assert.equal([...f.rows.values()].filter(v=>v.kind==='completion').length,1);
+ }
+});
+test('diagnostic completion charge validation is atomic and does not overwrite existing payments',async()=>{
+ const f=fixture();let r=await f.service.create(application(),'Staff');r=await reviewedAndScheduled(f,r);
+ const input={operationId:randomUUID(),revision:r.revision,name:'Volunteer',approxHours:'1',chargeAmount:'25'};
+ const before=structuredClone([...f.rows]);await assert.rejects(f.service.completeDiagnostic(r.id,input,'Staff'),/who pays/);assert.deepEqual([...f.rows],before);
+ f.rows.set('drivewiseCustomerAccounts/'+r.id,{chargeCents:2500,payments:[{id:'existing',amountCents:1000}],audit:[]});
+ const paidBefore=structuredClone([...f.rows]);await assert.rejects(f.service.completeDiagnostic(r.id,{...input,chargeAmount:'0'},'Staff'),/payments/);assert.deepEqual([...f.rows],paidBefore);
+});
+test('editing earlier steps after mechanic assignment preserves live workflow, links and existing ledger',async()=>{
+ const f=fixture();let r=await f.service.create(application(),'Staff');r=await reviewedAndScheduled(f,r);
+ r=await f.service.diagnostic(r.id,{operationId:randomUUID(),revision:r.revision,notes:'Original'},'Staff');f.rows.set('drivewiseCustomerAccounts/'+r.id,{chargeCents:0,payments:[]});
+ r=await f.service.activate(r.id,{operationId:randomUUID(),revision:r.revision,mechanicId:'tim-morningstar'},'Staff');const link=f.rows.get('drivewiseMechanicWork/'+r.id).linkHash;
+ r=await f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'eligible',notes:'Corrected review'},'Staff');assert.equal(r.workflowStatus,'live');
+ r=await f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-23',time:'16:10'},'Staff');assert.equal(r.workflowStatus,'live');
+ r=await f.service.diagnostic(r.id,{operationId:randomUUID(),revision:r.revision,notes:'Corrected diagnosis',partsOrdered:'Part'},'Staff');assert.equal(r.workflowStatus,'live');assert.equal(f.rows.get('drivewiseMechanicWork/'+r.id).linkHash,link);
+ await assert.rejects(f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'not_eligible',notes:'Disallowed late denial'},'Staff'),/cannot be denied/);
+});

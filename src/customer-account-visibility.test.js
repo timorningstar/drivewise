@@ -47,3 +47,11 @@ test('diagnostic options only list configured weekday, skip full weeks/past time
  assert(available([{...booked,workflowStatus:'not_eligible'}],settings,'new',now)[0].times.includes('15:50'));
  assert.equal(available([],settings,'new',new Date('2026-11-23T22:00:00Z'))[0].date,'2026-11-30');
 });
+
+test('workflow progress highlights correct next step and retains completion states',async()=>{
+ const{workflowProgress:p}=await import('./workflow-progress.js');
+ assert.equal(p({}).next,1);assert.equal(p({eligibility:{decision:'eligible'}}).next,2);
+ const scheduled={eligibility:{decision:'eligible'},diagnostic:{date:'2026-11-30',time:'15:30'}};assert.equal(p(scheduled).next,3);
+ const diagnosed={...scheduled,diagnosticNotes:'Saved'};assert.equal(p(diagnosed).next,4);assert.equal(p(diagnosed).state(3),'done');
+ assert.equal(p({...diagnosed,assignedMechanic:{id:'mechanic'}}).next,0);assert.equal(p({...diagnosed,workflowStatus:'complete'}).complete,true);assert.equal(p({eligibility:{decision:'not_eligible'}}).next,0);
+});
