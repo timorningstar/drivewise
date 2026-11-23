@@ -88,3 +88,10 @@ Full Admins can open **Setup → Diagnostic schedule**, choose any day of the we
 Staff scheduling then shows that weekday and the saved times. Staff still contacts the customer offline, chooses a date on the configured weekday, selects a time, and saves the appointment. The server checks the current saved schedule, including when an older staff screen is still open. Settings changes do not move or cancel previously booked appointments; their saved date/time remains visible. To reschedule, choose a date/time allowed by the current settings.
 
 The automatic diagnostic email still runs Friday at 4:00 PM Indiana time. Its target is the next occurrence of the configured diagnostic weekday after the run date (a Friday diagnostic setting targets the following Friday). Its subject no longer assumes Monday. Setup's manual diagnostic email control accepts any actual appointment date, including an older booking retained after changing the weekday. Existing queued emails keep their snapshots; changing the schedule does not resend them. If changing the diagnostic weekday while appointments are already booked, review those bookings and use the manual date-specific list for any retained old date as needed.
+
+
+## Compact navigation (November 23)
+
+Normal sign-in opens **Pending Requests**. Select the summary boxes to open Pending Requests, Live repairs, Completed repairs, Customer balances due or Unchecked invoices. The active box has a gold indicator and each box displays Open. Specific-request links still open their intended record.
+
+The remaining compact menu is **All vehicle records**, **Finance**, and **Setup** (Full Admin only). Finance opens Vendor invoices and groups **Vendor invoices**, **Shop supplies** and **Customer payments** in one contextual menu. Repair-authorized staff can also create shop supplies there. Accounting-only users retain their existing record/invoice/payment access without repair creation or Setup privileges. The balances and unchecked-invoice boxes are direct Finance shortcuts. The long duplicate navigation row is removed in the Testing app.

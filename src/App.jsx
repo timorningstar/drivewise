@@ -152,6 +152,7 @@ function DrivewiseAdminApp() {
     }
     setData(normalizeDrivewisePayload(payload))
     setAccountForm({ username: payload.mainAdminUsername || '', password: '' })
+    if(TESTING&&payload.role!=='recovery') setActiveView('workflow')
     if (payload.role === 'recovery') setActiveView('entry')
     const linkedId=new URLSearchParams(window.location.search).get('repair')||sessionStorage.getItem('drivewise-requested-repair')
     const linkedRepair=linkedId&&payload.role!=='recovery'&&payload.repairs?.find(r=>r.id===linkedId)
