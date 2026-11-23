@@ -27,3 +27,11 @@ test('completed date range uses Indiana completion dates, inclusive bounds and l
  assert(matches({historicalComplete:true,repairDate:'2026-11-01'},{from:'2026-11-01',through:'2026-11-30'}));
  assert(matches({},{}));assert(!matches({},{from:'2026-11-01'}));assert(!matches(r,{from:'2026-11-24',through:'2026-11-01'}));
 });
+
+test('In Diagnostics counts scheduled diagnostic requests only',async()=>{
+ const{repairInDiagnostics,dashboardTotals}=await import('./drivewise-dashboard.js');
+ const scheduled={workflowStatus:'diagnostic_scheduled',eligibility:{decision:'eligible'}};
+ assert(repairInDiagnostics(scheduled));
+ for(const repair of [{workflowStatus:'pending'},{workflowStatus:'awaiting_repair'},{workflowStatus:'live'},{...scheduled,mechanic:{completedAt:'2026-11-23'}},{...scheduled,eligibility:{decision:'not_eligible'}}])assert(!repairInDiagnostics(repair));
+ assert.equal(dashboardTotals([scheduled,{workflowStatus:'not_eligible'},{workflowStatus:'complete'}]).diagnostics,1);
+});

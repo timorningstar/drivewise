@@ -111,3 +111,8 @@ The Pending Requests **Show** filter contains only **Requests and diagnostics in
 ## Completed repair Date Range (November 23)
 
 Open the **Completed repairs** summary box and use **Date Range → From / Through**. Both endpoints are included; either can be left blank for an open-ended range. **Clear dates** restores all completed repairs. The filter applies before grouping, so both By vehicle and By vendor use the same date range. It uses repair completion date in Indiana local time, falling back to the recorded repair date for older records without a completion timestamp. Invalid reversed ranges show a message and no matching results. Filtering does not change records or the overall Completed repairs summary count.
+
+
+## In Diagnostics summary box (November 23)
+
+**In Diagnostics** counts requests with a scheduled diagnostic appointment that have not completed diagnostics, been denied or completed the repair. Click the box to open the request workflow filtered to **In Diagnostics**. The same choice is available in Show. After staff saves diagnostic results, the request moves to awaiting repair decision and leaves this count. Pending Requests remains the default opening view and its combined in-progress view still includes diagnostic requests.

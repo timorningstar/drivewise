@@ -18,6 +18,7 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
       {canView&&<>
         <div className={TESTING?"dw-stats dw-test-stats":"dw-stats"} aria-label="DriveWise summary">
           {TESTING&&<button type="button" className="dw-stat" aria-current={activeView==='workflow'?'page':undefined} onClick={()=>onView('workflow')}><small>Pending Requests</small><strong>{totals.pending}</strong></button>}
+          {TESTING&&<button type="button" className="dw-stat" aria-current={activeView==='diagnostics'?'page':undefined} onClick={()=>onView('diagnostics')}><small>In Diagnostics</small><strong>{totals.diagnostics}</strong></button>}
           <button type="button" className="dw-stat" aria-current={current('repairs','open')?'page':undefined} onClick={()=>onRepairs('open')}><small>{TESTING?'Live repairs':'Open repairs'}</small><strong>{totals.open}</strong></button>
           <button type="button" className="dw-stat" aria-current={current('repairs','completed')?'page':undefined} onClick={()=>onRepairs('completed')}><small>Completed repairs</small><strong>{totals.completed}</strong></button>
           <button type="button" className="dw-stat" aria-current={activeView==='customerPayments'?'page':undefined} onClick={()=>onView('customerPayments')}><small>Customer balances due</small><strong>{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(totals.balanceCents/100)}</strong></button>

@@ -1018,7 +1018,7 @@ function DrivewiseAdminApp() {
 
 
       <section className="admin-shell drivewise-shell">
-        {TESTING&&['workflow','newApplication'].includes(activeView)&&<IntakeWorkflow key={activeView} data={data} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))} newRequest={activeView==='newApplication'} initialId={workflowSelection} onView={setActiveView}/>}
+        {TESTING&&['workflow','diagnostics','newApplication'].includes(activeView)&&<IntakeWorkflow key={activeView} data={data} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))} newRequest={activeView==='newApplication'} initialFilter={activeView==='diagnostics'?'diagnostics':'open'} initialId={activeView==='diagnostics'?'':workflowSelection} onView={setActiveView}/>}
         {TESTING&&data.role==='full'&&activeView==='setup'&&<DrivewiseSetup initial={data.workflow} request={customerRequest} onData={value=>setData(normalizeDrivewisePayload(value))}/>}
         {canViewDrivewiseRecords&&activeView==='customerPayments'&&<CustomerPayments repairs={repairs} role={data.role} request={customerRequest} onAccount={(id,account)=>{
           setData(current=>({...current,repairs:current.repairs.map(r=>r.id===id?{...r,customerAccount:account}:r)}))
