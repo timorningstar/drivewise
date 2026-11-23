@@ -3,6 +3,8 @@ const fail=message=>{throw Object.assign(Error(message),{statusCode:400});};
 const validEmail=value=>typeof value==='string'&&value.length<=254&&/^\S+@[^\s@]+\.[^\s@]+$/.test(value);
 const clean=value=>String(value||'').trim().toLowerCase();
 const defaults={
+ diagnosticDay:1,
+ diagnosticTimes:['15:30','15:50','16:10'],
  carRepairRequestEmails:['carapp@downtownmin.org','carrepair@downtownmin.org'],
  accountingEmail:'accounting@downtownmin.org',
  diagnosticEmail:'t1@downtownmin.org',
@@ -15,9 +17,19 @@ function requestEmails(input){
  if(!result.length||result.some(email=>!validEmail(email)))fail('Enter one to three valid Car Repair Requests email addresses.');
  return result;
 }
+function diagnosticSchedule(input,previous=defaults){
+ const raw=input.diagnosticDay??previous.diagnosticDay;
+ const day=typeof raw==='number'?raw:/^[0-6]$/.test(raw||'')?Number(raw):NaN;
+ if(!Number.isInteger(day)||day<0||day>6)fail('Choose a diagnostic day of the week.');
+ const times=input.diagnosticTimes??previous.diagnosticTimes;
+ if(!Array.isArray(times)||!times.length||times.length>24||times.some(t=>typeof t!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)))fail('Enter one to 24 valid diagnostic appointment times.');
+ if(new Set(times).size!==times.length)fail('Diagnostic appointment times must be different.');
+ return {diagnosticDay:day,diagnosticTimes:[...times].sort()};
+}
 function readSettings(source={}){
  const legacy=[source.applicationEmail,source.repairEmail].filter(Boolean);
  return {
+  ...diagnosticSchedule(source),
   carRepairRequestEmails:requestEmails(source.carRepairRequestEmails??(legacy.length?legacy:defaults.carRepairRequestEmails)),
   accountingEmail:source.accountingEmail||defaults.accountingEmail,
   diagnosticEmail:source.diagnosticEmail||defaults.diagnosticEmail,
@@ -25,9 +37,9 @@ function readSettings(source={}){
   mechanics:source.mechanics||defaults.mechanics
  };
 }
-function validateSettings(input){
+function validateSettings(input,previous=defaults){
  // Accept an already-open older settings form during rollout without losing its recipients.
- const next={carRepairRequestEmails:requestEmails(input.carRepairRequestEmails??[input.applicationEmail,input.repairEmail].filter(Boolean))};
+ const next={...diagnosticSchedule(input,previous),carRepairRequestEmails:requestEmails(input.carRepairRequestEmails??[input.applicationEmail,input.repairEmail].filter(Boolean))};
  for(const key of ['accountingEmail','diagnosticEmail','contactEmail']){
   const value=clean(input[key]||(key==='contactEmail'?input.repairEmail:''));
   if(!validEmail(value))fail('Enter a valid email address for each notification function.');next[key]=value;
@@ -40,4 +52,4 @@ function validateSettings(input){
  });
  return next;
 }
-module.exports={defaults,readSettings,validateSettings,requestEmails};
+module.exports={defaults,readSettings,validateSettings,requestEmails,diagnosticSchedule};

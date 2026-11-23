@@ -1,14 +1,16 @@
 import {useState} from 'react'
 
 export default function DrivewiseSetup({initial,request,onData}) {
+ const [day,setDay]=useState(initial.diagnosticDay??1),[times,setTimes]=useState(initial.diagnosticTimes||['15:30','15:50','16:10'])
+ const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
  const [emails,setEmails]=useState(()=>[...(initial.carRepairRequestEmails||[]),'','',''].slice(0,3))
  const [mechanics,setMechanics]=useState(()=>initial.mechanics.map(m=>({...m})))
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
  async function save(e){
   e.preventDefault();setBusy(true);setError('');setNotice('')
   try{
-   const result=await request('/api/workflow/settings',{...Object.fromEntries(new FormData(e.currentTarget)),carRepairRequestEmails:emails.map(v=>v.trim()).filter(Boolean),mechanics})
-   onData(result);setNotice('Setup saved. New notifications will use these recipients.')
+   const result=await request('/api/workflow/settings',{...Object.fromEntries(new FormData(e.currentTarget)),diagnosticDay:Number(day),diagnosticTimes:times,carRepairRequestEmails:emails.map(v=>v.trim()).filter(Boolean),mechanics})
+   onData(result);setNotice('Setup saved. Staff scheduling will use the saved diagnostic day and times.')
   }catch(e){setError(e.message)}finally{setBusy(false)}
  }
  async function digest(e){
@@ -17,8 +19,14 @@ export default function DrivewiseSetup({initial,request,onData}) {
  }
  return <section className="panel drivewise-setup">
   <div className="section-heading"><p className="eyebrow">Full Admin</p><h2>Setup</h2></div>
-  <p>Manage notification recipients and mechanics for DriveWise.</p>
+  <p>Manage diagnostic appointments, notification recipients and mechanics for DriveWise.</p>
   <form onSubmit={save}>
+   <fieldset><legend>Diagnostic schedule</legend>
+    <p>Staff arrange appointments with customers offline, then choose a date on this day and one of these times. All times are Indiana local time. Existing appointments keep their saved dates and times.</p>
+    <label>Diagnostic day<select value={day} disabled={busy} onChange={e=>setDay(Number(e.target.value))}>{days.map((name,i)=><option key={name} value={i}>{name}</option>)}</select></label>
+    <div className="field-grid">{times.map((time,i)=><div key={i}><label>Appointment time {i+1}<input type="time" required value={time} disabled={busy} onChange={e=>setTimes(times.map((v,n)=>n===i?e.target.value:v))}/></label><button type="button" disabled={busy||times.length===1} onClick={()=>setTimes(times.filter((_,n)=>n!==i))}>Remove time {i+1}</button></div>)}</div>
+    <button type="button" disabled={busy||times.length>=24} onClick={()=>setTimes([...times,''])}>Add appointment time</button>
+   </fieldset>
    <fieldset><legend>Car Repair Requests</legend>
     <p>This group receives new pending repair requests and completed repair work orders. Each application generates one notification. Add up to three recipients. Enter individual addresses to manage the group here.</p>
     <div className="field-grid">{emails.map((value,i)=><label key={i}>Email address {i+1}{i?' (optional)':''}<input type="email" required={i===0} maxLength={254} disabled={busy} value={value} onChange={e=>setEmails(emails.map((v,n)=>n===i?e.target.value:v))}/></label>)}</div>
@@ -26,7 +34,7 @@ export default function DrivewiseSetup({initial,request,onData}) {
    <fieldset><legend>Other email functions</legend><div className="field-grid">
     {[
      ['accountingEmail','Accounting notifications','Receives customer payment and reversal notices.'],
-     ['diagnosticEmail','Friday diagnostic appointments','Receives the Monday appointment list and diagnostic PDF.'],
+     ['diagnosticEmail','Friday diagnostic appointments','Receives the diagnostic appointment list and PDF.'],
      ['contactEmail','DriveWise contact / replies','Contact address included in customer messages.']
     ].map(([key,label,help])=><label key={key}>{label}<input name={key} type="email" required maxLength={254} disabled={busy} defaultValue={initial[key]||''}/><small>{help}</small></label>)}
    </div></fieldset>
@@ -42,8 +50,8 @@ export default function DrivewiseSetup({initial,request,onData}) {
    <p>Changes apply to new notifications. Messages already queued retain their original recipients.</p>
    <button className="primary-action" disabled={busy}>{busy?'Saving…':'Save setup'}</button>
   </form>
-  <details><summary>Diagnostic email controls</summary><p>Friday emails run at 4:00 PM Indiana time for the following Monday. Workflow emails pending at last refresh: {initial.pending||0}.</p>
-   <form onSubmit={digest}><label>Monday date for diagnostic email<input name="date" type="date" required disabled={busy}/></label><button disabled={busy}>Send diagnostic list once</button></form>
+  <details><summary>Diagnostic email controls</summary><p>Friday emails run at 4:00 PM Indiana time for the next configured diagnostic day. Save schedule changes before sending a list. Workflow emails pending at last refresh: {initial.pending||0}.</p>
+   <form onSubmit={digest}><label>Appointment date for diagnostic email<input name="date" type="date" required disabled={busy}/></label><button disabled={busy}>Send diagnostic list once</button></form>
   </details>
   {error&&<p className="error-message" role="alert">{error}</p>}{notice&&<p className="success-message" role="status">{notice}</p>}
  </section>

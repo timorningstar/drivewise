@@ -13,3 +13,11 @@ test('new setup separates functions and an older open form remains compatible',(
  assert.deepEqual(saved.carRepairRequestEmails,['staff@example.test']);assert.equal(saved.contactEmail,'reply@example.test');assert.equal(saved.applicationEmail,undefined);
  const older=validateSettings({applicationEmail:'old1@example.test',repairEmail:'old2@example.test',diagnosticEmail:defaults.diagnosticEmail,accountingEmail:defaults.accountingEmail,mechanics:[]});assert.deepEqual(older.carRepairRequestEmails,['old1@example.test','old2@example.test']);
 });
+
+ test('diagnostic schedule defaults, normalizes times and rejects invalid or duplicate entries',()=>{
+ assert.equal(readSettings().diagnosticDay,1);assert.deepEqual(readSettings().diagnosticTimes,['15:30','15:50','16:10']);
+ const result=validateSettings({...defaults,diagnosticDay:'3',diagnosticTimes:['14:30','14:00']});assert.equal(result.diagnosticDay,3);assert.deepEqual(result.diagnosticTimes,['14:00','14:30']);
+ for(const patch of [{diagnosticDay:7},{diagnosticDay:''},{diagnosticTimes:[]},{diagnosticTimes:['25:00']},{diagnosticTimes:['14:00','14:00']}])assert.throws(()=>validateSettings({...defaults,...patch}));
+ const older={...defaults};delete older.diagnosticDay;delete older.diagnosticTimes;
+ assert.equal(validateSettings(older,result).diagnosticDay,3);assert.deepEqual(validateSettings(older,result).diagnosticTimes,['14:00','14:30']);
+ });

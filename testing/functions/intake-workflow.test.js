@@ -84,9 +84,24 @@ test('an outdated queued denial is cancelled after staff reconsiders, without se
 test('Setup stores three direct recipients, sends one request event, retains old queued destinations and routes completions to that same group',async()=>{
  const f=fixture();const old=await f.service.create(application(),'Staff');const settings=await f.service.config();const direct=['one@example.test','two@example.test','three@example.test'];
  await f.service.settings({...settings,carRepairRequestEmails:direct,accountingEmail:'finance@example.test',diagnosticEmail:'diagnostics@example.test',contactEmail:'contact@example.test'},'Full Admin');
- const saved=f.rows.get('drivewiseSettings/workflow');assert.equal(saved.setupVersion,2);assert.deepEqual(saved.carRepairRequestEmails,direct);assert.equal(saved.applicationEmail,undefined);
+ const saved=f.rows.get('drivewiseSettings/workflow');assert.equal(saved.setupVersion,3);assert.deepEqual(saved.carRepairRequestEmails,direct);assert.equal(saved.applicationEmail,undefined);
  assert.deepEqual(f.rows.get('drivewiseWorkflowNotifications/pending-'+old.id).recipients,['carapp@downtownmin.org','carrepair@downtownmin.org']);
  let r=await f.service.create(application(),'Staff');assert.deepEqual(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id).recipients,direct);assert(!f.rows.has('drivewiseWorkflowNotifications/application-'+r.id));
  r=await reviewedAndScheduled(f,r);f.rows.set('drivewiseCustomerAccounts/'+r.id,{chargeCents:0,payments:[]});await f.service.completeDiagnostic(r.id,{operationId:randomUUID(),revision:r.revision,name:'Mechanic',approxHours:'1'},'Staff');assert.deepEqual(f.rows.get('drivewiseNotifications/completion-'+r.id).recipients,direct);
  const unchanged=structuredClone(saved);await assert.rejects(f.service.settings({...settings,carRepairRequestEmails:[...direct,'four@example.test']},'Full Admin'),/three/);assert.deepEqual(f.rows.get('drivewiseSettings/workflow'),unchanged);
+});
+
+test('Setup schedule is authoritative, leaves bookings intact, and older settings forms preserve it',async()=>{
+ const f=fixture();let r=await f.service.create(application(),'Staff');r=await reviewedAndScheduled(f,r);
+ const old=structuredClone(r.diagnostic),settings=await f.service.config();
+ await f.service.settings({...settings,diagnosticDay:3,diagnosticTimes:['14:30','14:00']},'Admin');
+ assert.deepEqual(f.rows.get('appState/drivewise').state.repairs[0].diagnostic,old);
+ const staleForm={...settings};delete staleForm.diagnosticDay;delete staleForm.diagnosticTimes;
+ await f.service.settings(staleForm,'Admin');assert.equal((await f.service.snapshot()).diagnosticDay,3);
+ await assert.rejects(f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-23',time:'15:30'},'Staff'),/Setup/);
+ await assert.rejects(f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-25',time:'15:30'},'Staff'),/Setup/);
+ r=await f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-25',time:'14:30'},'Staff');
+ assert.equal(r.diagnostic.date,'2026-11-25');assert.equal(r.diagnostic.time,'14:30');
+ await f.service.digest('2026-11-25');const email=await message(f.rows.get('drivewiseWorkflowNotifications/diagnostics-2026-11-25'));assert.match(email.subject,/2026-11-25/);assert(!email.subject.includes('Monday'));
+ const pending=await message(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id));assert.match(pending.text,/configured in Setup/);assert(!pending.text.includes('Monday'));
 });
