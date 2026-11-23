@@ -1,3 +1,4 @@
+import CustomerPaymentSummary from './CustomerPaymentSummary'
 import RepairDateRange from './RepairDateRange'
 import MechanicPage from './MechanicPage'
 import IntakeWorkflow from './IntakeWorkflow'
@@ -1052,6 +1053,7 @@ function DrivewiseAdminApp() {
           </div>
 
           {repairForm.correctionHistory?.length>0&&<details className="invoice-history"><summary>Repair correction history</summary>{repairForm.correctionHistory.map(entry=><article key={entry.id}><strong>{entry.openedBy} · {new Date(entry.openedAt).toLocaleString()}</strong><p className="repair-description">Reason: {entry.reason}</p>{entry.finishedAt&&<p>Corrections saved by {entry.finishedBy} · {new Date(entry.finishedAt).toLocaleString()}</p>}</article>)}</details>}
+          {repairForm.id&&<CustomerPaymentSummary account={data.repairs.find(r=>r.id===repairForm.id)?.customerAccount||repairForm.customerAccount}/>}
           <div className="field-grid">
             <label>
               Repair date *
@@ -1732,7 +1734,7 @@ function DrivewiseAdminApp() {
                       {repair.correctionOpen?' - Reopened for corrections':repair.historicalComplete?' - Repair complete':''}
                       {!repair.correctionOpen&&repair.customerAccount?.closedAt ? ' - Closed (customer balance paid)' : ''}
                       {repairHasCompletedStatement(repair) ? ' - Statement complete' : ''}
-                      {repair.mechanic?.completedAt&&<strong> · Repair completed by {repair.mechanic.mechanicName}</strong>}
+                      <CustomerPaymentSummary compact account={repair.customerAccount}/>{repair.mechanic?.completedAt&&<strong> · Repair completed by {repair.mechanic.mechanicName}</strong>}
                       {repair.mechanic&&<details><summary>Mechanic updates and attachments</summary><p>Approximate mechanic hours: {repair.mechanic.approxHours??'Not recorded'}</p>{repair.mechanic.notes.map((entry,i)=><p key={i}>{entry.author}: {entry.body}</p>)}{repair.mechanic.files.map(file=><p key={file.id}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a>{file.vendor&&<> · {file.vendor}</>}{file.invoiceNumber&&<> · Invoice {file.invoiceNumber}</>}{(canManageDrivewiseRepairs||canManageDrivewiseAccounting)&&<button className="text-action" type="button" onClick={()=>setMoveTarget({kind:'mechanic',repairId:repair.id,item:file})}>Move / reclassify</button>}</p>)}</details>}
                       {repair.invoiceTransfers?.length>0&&<details className="invoice-history"><summary>Invoice movement history</summary>{repair.invoiceTransfers.map(entry=><article key={entry.operationId}><strong>{entry.by} · {new Date(entry.at).toLocaleString()}</strong><p>From: {entry.fromLabel}<br/>To: {entry.toLabel}</p><p>Reason: {entry.reason}</p></article>)}</details>}
                     </span>

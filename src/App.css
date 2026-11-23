@@ -1004,3 +1004,9 @@ dd {
 .step-next .step-badge,.workflow-progress .step-next { background:#ffe8ab; color:#533b0b; }
 .workflow-option { display:flex!important; align-items:center; gap:10px; padding:12px; background:#eef4f8; border-radius:6px; margin:12px 0; }
 .workflow-option input { width:auto!important; }
+
+.customer-payment-summary { border:1px solid #c9ddd4; background:#f0f8f4; border-radius:8px; padding:16px; margin:8px 0 22px; }
+.customer-payment-summary h3 { margin-top:0; }
+.customer-payment-summary .field-grid p { margin:4px 0; }
+.customer-payment-summary summary { cursor:pointer; font-weight:650; }
+.customer-payment-inline { display:block; margin-top:8px; color:#20513d; }
