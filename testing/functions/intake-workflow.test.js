@@ -105,3 +105,15 @@ test('Setup schedule is authoritative, leaves bookings intact, and older setting
  await f.service.digest('2026-11-25');const email=await message(f.rows.get('drivewiseWorkflowNotifications/diagnostics-2026-11-25'));assert.match(email.subject,/2026-11-25/);assert(!email.subject.includes('Monday'));
  const pending=await message(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id));assert.match(pending.text,/configured in Setup/);assert(!pending.text.includes('Monday'));
 });
+
+test('concurrent diagnostic bookings allow one winner, own reschedule is safe, denial frees the slot',async()=>{
+ const f=fixture();const requests=[];
+ for(let i=0;i<2;i++){let r=await f.service.create(application(),'Staff');r=await f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'eligible'},'Staff');requests.push(r);}
+ const input=r=>({operationId:randomUUID(),revision:r.revision,date:'2026-11-23',time:'15:30'});
+ const results=await Promise.allSettled(requests.map(r=>f.service.schedule(r.id,input(r),'Staff')));
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.find(r=>r.status==='rejected').reason.statusCode,409);
+ let winner=results.find(r=>r.status==='fulfilled').value;
+ winner=await f.service.schedule(winner.id,input(winner),'Staff');
+ await f.service.review(winner.id,{operationId:randomUUID(),revision:winner.revision,decision:'not_eligible',notes:'Sample denial'},'Staff');
+ const loser=requests.find(r=>r.id!==winner.id);const booked=await f.service.schedule(loser.id,input(loser),'Staff');assert.equal(booked.diagnostic.time,'15:30');
+});

@@ -14,7 +14,7 @@ The public downtownmin.org website form is unchanged at Tim's explicit direction
 ## Staff workflow
 
 1. Review **Pending requests and diagnostics**. A website application or staff-created application creates a pending request and one combined notification to the **Car Repair Requests** recipients configured in Setup.
-2. Save the staff eligibility decision first. A not-eligible decision requires a reason and retains the request/history. Eligible requests remain pending until an appointment is entered. Contact the customer offline. Select the request and record the agreed diagnostic date and time from the schedule in **Setup** (initially Monday at **3:30, 3:50 or 4:10 PM**), Indiana local time. The app does not book appointments for the customer. Staff must coordinate slot capacity offline.
+2. Save the staff eligibility decision first. A not-eligible decision requires a reason and retains the request/history. Eligible requests remain pending until an appointment is entered. Contact the customer offline. Select the request and record the agreed diagnostic date and time from the schedule in **Setup** (initially Monday at **3:30, 3:50 or 4:10 PM**), Indiana local time. The app does not book appointments for the customer. The app permits only one request per diagnostic date/time slot, including simultaneous staff saves.
 3. Each Friday at **4:00 PM Indiana time**, the app queues one email listing the next configured diagnostic day's names and times, with a printable diagnostic PDF containing the demographics, repair request, and writing lines for diagnosis and parts. During testing, Stephanie's recipient is **t1@downtownmin.org**. No email is generated for an empty appointment list. Manual send is available in Setup under Diagnostic email controls; duplicate sends for the same appointment date are prevented.
 4. Todd/Stephanie emails the completed PDF to carrepair. Staff records the diagnostic notes and parts in the app; incoming email/PDF extraction is not automated.
 5. Open **Customer payments** and set the agreed charge, including an explicit `0.00` when nothing is owed. Record full or partial receipts when received. An agreed cost is mandatory for live mechanic assignment; receiving payment is optional. Payments and reversals notify Accounting and preserve history.
@@ -119,3 +119,10 @@ Open the **Completed repairs** summary box and use **Date Range → From / Throu
 
 
 Staff application entry uses the **+ New request** button at the top of DriveWise. The duplicate **+ New application** bar inside Pending Requests has been removed. The **Customer application form** link remains available for customer self-entry without sign-in.
+
+
+## Available diagnostic dates and one appointment per slot (November 23)
+
+The diagnostic date field is an available-date dropdown instead of an unrestricted calendar. It lists only the configured weekday with at least one available appointment time. New bookings default to the earliest available date/time, considering today's remaining slots in Indiana local time and skipping elapsed times or full dates. Staff still arranges the appointment with the customer before saving it. Dates are offered for the next two years.
+
+Booked slots do not appear for other requests. The currently edited request does not block its own slot. The server rechecks both current Setup and all bookings in the same transaction, so only one of two competing bookings can succeed; the other staff member must refresh and choose another slot. Denied/cancelled requests release their appointments; rescheduling releases the previous slot. Completed appointments retain their historical reservation. Existing saved appointments are displayed and are never moved automatically; changing a default or opening a form does not book anything.
