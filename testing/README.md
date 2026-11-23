@@ -126,3 +126,8 @@ Staff application entry uses the **+ New request** button at the top of DriveWis
 The diagnostic date field is an available-date dropdown instead of an unrestricted calendar. It lists only the configured weekday with at least one available appointment time. New bookings default to the earliest available date/time, considering today's remaining slots in Indiana local time and skipping elapsed times or full dates. Staff still arranges the appointment with the customer before saving it. Dates are offered for the next two years.
 
 Booked slots do not appear for other requests. The currently edited request does not block its own slot. The server rechecks both current Setup and all bookings in the same transaction, so only one of two competing bookings can succeed; the other staff member must refresh and choose another slot. Denied/cancelled requests release their appointments; rescheduling releases the previous slot. Completed appointments retain their historical reservation. Existing saved appointments are displayed and are never moved automatically; changing a default or opening a form does not book anything.
+
+
+## Diagnostic email wording and printable writing space (November 23)
+
+Diagnostic list subject is **DTM Car Diagnostic Monday** (weekday derived from the appointment date). The body begins **Monday, November 30**, then customer names and appointment times in AM/PM format. Indiana-time clarification and the Testing notice follow the list. PDF attachment retained; Diagnostic notes and Parts ordered each have five lines with increased handwriting spacing (1.8 times prior vertical spacing), one page per ordinary customer request. No resend of an already delivered date is triggered by this update; per-date duplicate protection remains.

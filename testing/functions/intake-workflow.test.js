@@ -102,7 +102,7 @@ test('Setup schedule is authoritative, leaves bookings intact, and older setting
  await assert.rejects(f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-25',time:'15:30'},'Staff'),/Setup/);
  r=await f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-25',time:'14:30'},'Staff');
  assert.equal(r.diagnostic.date,'2026-11-25');assert.equal(r.diagnostic.time,'14:30');
- await f.service.digest('2026-11-25');const email=await message(f.rows.get('drivewiseWorkflowNotifications/diagnostics-2026-11-25'));assert.match(email.subject,/2026-11-25/);assert(!email.subject.includes('Monday'));
+ await f.service.digest('2026-11-25');const email=await message(f.rows.get('drivewiseWorkflowNotifications/diagnostics-2026-11-25'));assert.equal(email.subject,'DTM Car Diagnostic Wednesday');assert(!email.subject.includes('Monday'));
  const pending=await message(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id));assert.match(pending.text,/configured in Setup/);assert(!pending.text.includes('Monday'));
 });
 
@@ -116,4 +116,9 @@ test('concurrent diagnostic bookings allow one winner, own reschedule is safe, d
  winner=await f.service.schedule(winner.id,input(winner),'Staff');
  await f.service.review(winner.id,{operationId:randomUUID(),revision:winner.revision,decision:'not_eligible',notes:'Sample denial'},'Staff');
  const loser=requests.find(r=>r.id!==winner.id);const booked=await f.service.schedule(loser.id,input(loser),'Staff');assert.equal(booked.diagnostic.time,'15:30');
+});
+
+test('diagnostic email subject names weekday and body starts with readable date followed by names and AM/PM times',async()=>{
+ const email=await message({id:'sample-format',kind:'digest',date:'2026-11-30',recipients:['sample@example.test'],repairs:[{ownerName:'Sample Customer',diagnostic:{date:'2026-11-30',time:'15:30'}}]});
+ assert.equal(email.subject,'DTM Car Diagnostic Monday');assert(email.text.startsWith('Monday, November 30\n\nSample Customer — 3:30 PM'));assert(email.text.includes('TEST ENVIRONMENT'));assert.equal(email.attachments.length,1);
 });
