@@ -42,6 +42,7 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
         const [state,account,work,config]=await Promise.all([tx.get(stateRef()),tx.get(accounts.doc(id)),tx.get(workCollection.doc(id)),tx.get(workflowSettings)]);
         const repair=state.data()?.state?.repairs?.find(r=>r.id===id);
         if(!repair||repair.recordType==='shopSupply'||(repair.historicalComplete&&!repair.correctionOpen&&!account.exists))fail('Reopen historical repairs for corrections before creating their customer account.',409);
+        if((repair.workflowStatus==='not_eligible'||repair.eligibility?.decision==='not_eligible')&&input.action!=='void')fail('This request was denied. New customer charges and payments are not allowed; existing payment history is retained.',409);
         const result=changeAccount(account.data(),input,actor,work.data()?.completedAt||(repair.historicalComplete?'historical-complete':''));
         tx.set(accounts.doc(id),result.account);
         if(result.event)tx.create(outbox.doc(result.event.id),{...result.event,repairId:id,recipients:[readSettings(config.data()).accountingEmail],sentAt:null,attempts:0});

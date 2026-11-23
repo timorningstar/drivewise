@@ -65,3 +65,13 @@ test('mechanic completion uses the Setup Car Repair Requests group while payment
  await f.workflow.mutateAccount('r1',{action:'charge',amount:'25'},'Staff');const payment=pay();await f.workflow.mutateAccount('r1',payment,'Staff');await f.workflow.mutateWork('r1',work=>({...work,completedAt:'complete',mechanicName:'Mechanic'}));
  assert.deepEqual(f.records.get('drivewiseNotifications/completion-r1').recipients,['repair1@example.test','repair2@example.test','repair3@example.test']);assert.deepEqual(f.records.get('drivewiseNotifications/payment-'+payment.id).recipients,['finance@example.test']);
 });
+
+test('denied requests reject new charges and payments without writes, retaining existing history and permitting reversal',async()=>{
+ const f=fixture();await f.workflow.mutateAccount('r1',{action:'charge',amount:'25'},'Staff');
+ const payment=pay();await f.workflow.mutateAccount('r1',payment,'Staff');
+ f.records.get('appState/drivewise').state.repairs.find(r=>r.id==='r1').workflowStatus='not_eligible';
+ const prior=structuredClone([...f.records]);
+ await assert.rejects(f.workflow.mutateAccount('r1',{action:'charge',amount:'30'},'Staff'),{statusCode:409});
+ await assert.rejects(f.workflow.mutateAccount('r1',pay(),'Staff'),{statusCode:409});assert.deepEqual([...f.records],prior);
+ const result=await f.workflow.mutateAccount('r1',{action:'void',id:payment.id,reason:'Denied request refund correction'},'Accounting');assert(result.payments[0].voidedAt);assert.equal(result.payments.length,1);
+});

@@ -95,3 +95,8 @@ The automatic diagnostic email still runs Friday at 4:00 PM Indiana time. Its ta
 Normal sign-in opens **Pending Requests**. Select the summary boxes to open Pending Requests, Live repairs, Completed repairs, Customer balances due or Unchecked invoices. The active box has a gold indicator and each box displays Open. Specific-request links still open their intended record.
 
 The remaining compact menu is **All vehicle records**, **Finance**, and **Setup** (Full Admin only). Finance opens Vendor invoices and groups **Vendor invoices**, **Shop supplies** and **Customer payments** in one contextual menu. Repair-authorized staff can also create shop supplies there. Accounting-only users retain their existing record/invoice/payment access without repair creation or Setup privileges. The balances and unchecked-invoice boxes are direct Finance shortcuts. The long duplicate navigation row is removed in the Testing app.
+
+
+## Denied requests in Customer payments (November 23)
+
+Denied requests with no agreed charge or financial history are excluded from the Customer payments repair selector. Denial remains recorded under Pending Requests → Not eligible / denied; nothing is deleted. If a denied request already has a saved charge, payment or account audit history, Finance retains it for review and permitted payment reversals, with an explicit denied/history-only status. New charges and payment receipts are disabled in the screen and blocked on the server until staff reconsiders eligibility. A recorded zero-dollar charge is still financial history.

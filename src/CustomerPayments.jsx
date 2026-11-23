@@ -1,19 +1,20 @@
 import {useState} from 'react'
+import {customerAccountVisible,requestDenied} from './customer-account-visibility'
 const dollars=cents=>cents===null||cents===undefined?'Not set':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100)
 const emptyPayment=()=>({id:crypto.randomUUID(),amount:'',date:new Date().toLocaleDateString('en-CA'),receivedFrom:'',reference:''})
 
 export default function CustomerPayments({repairs,role,request,onAccount}) {
-  const choices=repairs.filter(r=>r.recordType!=='shopSupply'&&(!r.historicalComplete||r.correctionOpen||r.customerAccount))
+  const choices=repairs.filter(customerAccountVisible)
   const [id,setId]=useState(choices[0]?.id||'')
   const [charge,setCharge]=useState(''),[payment,setPayment]=useState(emptyPayment)
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('')
-  const repair=choices.find(r=>r.id===id),account=repair?.customerAccount||{}
+  const repair=choices.find(r=>r.id===id)||choices[0],account=repair?.customerAccount||{},denied=repair&&requestDenied(repair)
   const canReverse=['full','admin','accounting'].includes(role)
   async function save(input) {
     setBusy(true);setError('');setNotice('')
     try {
-      const result=await request('/api/drivewise-customer-account',{repairId:id,...input})
-      onAccount(id,result.account)
+      const result=await request('/api/drivewise-customer-account',{repairId:repair.id,...input})
+      onAccount(repair.id,result.account)
       if(input.action==='payment')setPayment(emptyPayment())
       if(input.action==='charge')setCharge('')
       setNotice(result.account.closedAt?'Saved. The work is complete and the customer balance is paid; this repair is closed.':input.action==='charge'?'Agreed customer charge saved.':'Saved. The payment notification is queued automatically.')
@@ -22,15 +23,15 @@ export default function CustomerPayments({repairs,role,request,onAccount}) {
   return <section className="panel">
     <div className="section-heading"><p className="eyebrow">Payments received</p><h2>Customer payments</h2></div>
     <p>Record money received from the vehicle owner or designated payer. Vendor invoices and payments are managed separately in Vendor Invoice View.</p>
-    {!choices.length?<p>No customer repair accounts are available. Historical repairs become available after being reopened for corrections.</p>:<>
-      <label>Repair<select value={id} disabled={busy} onChange={e=>{setId(e.target.value);setCharge('');setPayment(emptyPayment());setError('');setNotice('')}}>
+    {!choices.length?<p>No customer repair accounts are available. Denied requests without financial history are excluded. Historical repairs become available after being reopened for corrections.</p>:<>
+      <label>Repair<select value={repair?.id||''} disabled={busy} onChange={e=>{setId(e.target.value);setCharge('');setPayment(emptyPayment());setError('');setNotice('')}}>
         {choices.map(r=><option key={r.id} value={r.id}>{r.repairDate} · {r.ownerName} · {[r.year,r.make,r.model].filter(Boolean).join(' ')}</option>)}
       </select></label>
       {repair&&<>
         <p><strong>Payer:</strong> {repair.payer||repair.ownerName}</p>
         <div className="field-grid"><p><strong>Agreed charge</strong><br/>{dollars(account.chargeCents)}</p><p><strong>Payments received</strong><br/>{dollars(account.paidCents??0)}</p><p><strong>Outstanding balance</strong><br/>{dollars(account.balanceCents)}</p></div>
-        <p role="status">{account.closedAt?'Closed — work complete and customer balance paid.':!repair.mechanic?.completedAt?'Open — awaiting repair completion.':account.chargeCents===null||account.chargeCents===undefined?'Work complete — enter the agreed customer charge.':'Work complete — awaiting customer payment.'}</p>
-        <form onSubmit={e=>{e.preventDefault();save({action:'charge',amount:charge})}}>
+        <p role="status">{denied?'Denied request — retained financial history only. New charges and payments are disabled.':account.closedAt?'Closed — work complete and customer balance paid.':!repair.mechanic?.completedAt?'Open — awaiting repair completion.':account.chargeCents===null||account.chargeCents===undefined?'Work complete — enter the agreed customer charge.':'Work complete — awaiting customer payment.'}</p>
+        {!denied&&<><form onSubmit={e=>{e.preventDefault();save({action:'charge',amount:charge})}}>
           <label>Agreed total customer charge ($)<input type="number" min="0" max="1000000" step="0.01" required value={charge} disabled={busy} onChange={e=>setCharge(e.target.value)}/></label>
           <p>Enter the agreed charge, including labor or subsidies. Use 0.00 if nothing is owed. Increasing a paid charge reopens the repair; payments remain in the history.</p>
           <button className="secondary-action" type="submit" disabled={busy}>Save agreed charge</button>
@@ -45,7 +46,7 @@ export default function CustomerPayments({repairs,role,request,onAccount}) {
           </div>
           <button className="primary-action" type="submit" disabled={busy||!(account.balanceCents>0)}>Record payment received</button>
         </form>
-        <h3>Payment history</h3>
+        </>}<h3>Payment history</h3>
         <table className="schedule-table"><thead><tr><th>Date</th><th>Received from</th><th>Amount</th><th>Reference</th><th>Status</th></tr></thead><tbody>
           {(account.payments||[]).map(p=><tr key={p.id}><td>{p.date}</td><td>{p.receivedFrom}</td><td>{dollars(p.amountCents)}</td><td>{p.reference}</td><td>{p.voidedAt?<>Reversed: {p.voidReason}</>:<>Received {canReverse&&<button className="text-action" disabled={busy} type="button" onClick={()=>{const reason=window.prompt('Reason for reversing this payment (the original entry will remain in history):');if(reason?.trim())save({action:'void',id:p.id,reason})}}>Reverse payment</button>}</>}</td></tr>)}
           {!account.payments?.length&&<tr><td colSpan="5">No customer payments recorded.</td></tr>}
