@@ -2,7 +2,7 @@ const crypto=require('node:crypto');
 const fail=(message,statusCode=400)=>{throw Object.assign(new Error(message),{statusCode});};
 const hash=token=>crypto.createHash('sha256').update(token).digest('hex');
 const limit=4500000;
-function publicRepair(repair){return {id:repair.id,date:repair.repairDate,owner:repair.ownerName,vehicle:[repair.year,repair.make,repair.model].filter(Boolean).join(' '),details:repair.neededRepairs,notes:repair.notes||''};}
+function publicRepair(repair){return {id:repair.id,date:repair.repairDate,owner:repair.ownerName,vehicle:[repair.year,repair.make,repair.model].filter(Boolean).join(' '),details:repair.neededRepairs,notes:repair.notes||'',mechanic:repair.assignedMechanic?.name||'',diagnosticNotes:repair.diagnosticNotes||'',partsOrdered:repair.partsOrdered||''};}
 function fileBytes(input){
  const type=input.type,name=String(input.name||'').replaceAll('\n',' ').replaceAll('\r',' ').replaceAll('/',' ').replaceAll('\\',' ').trim().slice(0,150),data=input.data;
  if(!name||typeof data!=='string'||data.length>6000000||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))fail('Choose an image or PDF, up to 4.5 MB.');
@@ -20,7 +20,7 @@ function createMechanicService({repo,readRepair,saveFile,signFile,removeFile,now
   async issue(id,actor){const repair=await readRepair(id);if(!repair||repair.recordType==='shopSupply'||repair.historicalComplete)fail('Completed records cannot be shared with a mechanic.');const token=crypto.randomBytes(32).toString('hex'),key=hash(token),expiresAt=now()+30*86400000;await repo.putLink(key,{repairId:id,expiresAt,createdAt:new Date(now()).toISOString(),createdBy:actor});await repo.mutate(id,work=>({...work,linkHash:key,sharedAt:new Date(now()).toISOString()}));return {ok:true,url:'https://dtm-drivewise-test.web.app/#mechanic='+token,expiresAt};},
   async revoke(id){await repo.mutate(id,work=>({...work,linkHash:null}));return {ok:true};},
   view,
-  async update(token,input){const grant=await access(token),note=String(input.note||'').trim(),name=String(input.name||'').trim();if(note.length>6000||name.length>150)fail('Shorten the repair note or mechanic name.');if(input.complete===true&&!name)fail('Enter the maintenance person’s name before completing the repair.');
+  async update(token,input){const grant=await access(token),note=String(input.note||'').trim(),name=String(input.name||'').trim();if(note.length>6000||name.length>150)fail('Shorten the repair note or mechanic name.');if(input.complete===true&&!name)fail('Enter the mechanic’s name before completing the repair.');
    const hasHours=Object.hasOwn(input,'approxHours'),hourText=String(input.approxHours??'').trim();
    if(hasHours&&hourText&&!/^\d{1,4}(\.\d{1,2})?$/.test(hourText))fail('Enter approximate hours from 0 to 9999.99, with at most two decimal places.');
    const hours=hourText?Number(hourText):null;

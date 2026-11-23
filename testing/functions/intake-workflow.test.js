@@ -171,3 +171,11 @@ test('editing earlier steps after mechanic assignment preserves live workflow, l
  r=await f.service.diagnostic(r.id,{operationId:randomUUID(),revision:r.revision,notes:'Corrected diagnosis',partsOrdered:'Part'},'Staff');assert.equal(r.workflowStatus,'live');assert.equal(f.rows.get('drivewiseMechanicWork/'+r.id).linkHash,link);
  await assert.rejects(f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'not_eligible',notes:'Disallowed late denial'},'Staff'),/cannot be denied/);
 });
+
+test('mechanic assignment email has spaced work link without staff-review link or class attendance',async()=>{
+ const repair={id:'sample',ownerName:'Sample Customer',email:'sample@example.test',phone:'555-0100',year:'2017',make:'Example',model:'Van',classAttendance:'PRIVATE CLASS',neededRepairs:'Sample repair'};
+ const assignment=await message({id:'sample-assignment',kind:'assignment',repair,mechanicUrl:'https://example.test/#mechanic=sample',recipients:['mechanic@example.test']});
+ assert(!assignment.text.includes('Review this pending'));assert(!assignment.text.includes('#dtm-hub'));assert(!assignment.text.includes('PRIVATE CLASS'));assert(!assignment.text.includes('DTM class attendance'));
+ assert(assignment.text.includes('Repair need: Sample repair\n\nMechanic work order: https://example.test/#mechanic=sample'));
+ const pending=await message({id:'sample-pending',kind:'pending',repair,recipients:['staff@example.test']});assert(pending.text.includes('Review this pending'));assert(pending.text.includes('PRIVATE CLASS'));
+});
