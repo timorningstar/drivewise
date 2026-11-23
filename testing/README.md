@@ -100,3 +100,6 @@ The remaining compact menu is **All vehicle records**, **Finance**, and **Setup*
 ## Denied requests in Customer payments (November 23)
 
 Denied requests with no agreed charge or financial history are excluded from the Customer payments repair selector. Denial remains recorded under Pending Requests → Not eligible / denied; nothing is deleted. If a denied request already has a saved charge, payment or account audit history, Finance retains it for review and permitted payment reversals, with an explicit denied/history-only status. New charges and payment receipts are disabled in the screen and blocked on the server until staff reconsiders eligibility. A recorded zero-dollar charge is still financial history.
+
+
+**All vehicle records** lists actual live/completed repairs and legacy repair history, excluding pending, diagnostic-stage and denied applications. To review a denied application, choose the **Pending Requests** summary box, then **Show → Not eligible / denied**. Select the requester to review the decision/history or reconsider eligibility. Denied applications remain retained; these screen filters do not delete any record.

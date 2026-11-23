@@ -10,3 +10,11 @@ test('real financial history remains accessible after denial; supplies and unope
  assert.equal(customerAccountVisible({recordType:'shopSupply'}),false)
  assert.equal(Boolean(customerAccountVisible({historicalComplete:true})),false)
 })
+
+test('all vehicle repair records exclude denied and pre-repair applications, retaining actual and historical repairs',async()=>{
+ const{vehicleRepairRecord}=await import('./drivewise-dashboard.js');
+ for(const workflowStatus of ['not_eligible','pending','diagnostic_scheduled','awaiting_repair'])assert.equal(vehicleRepairRecord({workflowStatus}),false);
+ for(const record of [{workflowStatus:'live'},{workflowStatus:'complete'},{historicalComplete:true},{}])assert.equal(vehicleRepairRecord(record),true);
+ assert.equal(vehicleRepairRecord({eligibility:{decision:'not_eligible'}}),false);
+ assert.equal(vehicleRepairRecord({recordType:'shopSupply'}),false);
+});

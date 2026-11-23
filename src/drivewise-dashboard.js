@@ -18,3 +18,7 @@ export function dashboardTotals(repairs) {
     unchecked:repairs.flatMap(r=>r.invoices||[]).filter(i=>!i.statementChecked&&!i.statementComplete).length,
   }
 }
+
+export function vehicleRepairRecord(repair){
+ return repair.recordType!=='shopSupply'&&repair.workflowStatus!=='not_eligible'&&repair.eligibility?.decision!=='not_eligible'&&(vehicleRepairOpen(repair)||vehicleRepairComplete(repair))
+}
