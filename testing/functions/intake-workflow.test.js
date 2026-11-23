@@ -164,7 +164,7 @@ test('diagnostic completion charge validation is atomic and does not overwrite e
 });
 test('editing earlier steps after mechanic assignment preserves live workflow, links and existing ledger',async()=>{
  const f=fixture();let r=await f.service.create(application(),'Staff');r=await reviewedAndScheduled(f,r);
- r=await f.service.diagnostic(r.id,{operationId:randomUUID(),revision:r.revision,notes:'Original'},'Staff');f.rows.set('drivewiseCustomerAccounts/'+r.id,{chargeCents:0,payments:[]});
+ r=await f.service.diagnostic(r.id,{operationId:randomUUID(),revision:r.revision,notes:'Original'},'Staff');r=await f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'eligible',notes:'Corrected before assignment'},'Staff');assert.equal(r.workflowStatus,'awaiting_repair');f.rows.set('drivewiseCustomerAccounts/'+r.id,{chargeCents:0,payments:[]});
  r=await f.service.activate(r.id,{operationId:randomUUID(),revision:r.revision,mechanicId:'tim-morningstar'},'Staff');const link=f.rows.get('drivewiseMechanicWork/'+r.id).linkHash;
  r=await f.service.review(r.id,{operationId:randomUUID(),revision:r.revision,decision:'eligible',notes:'Corrected review'},'Staff');assert.equal(r.workflowStatus,'live');
  r=await f.service.schedule(r.id,{operationId:randomUUID(),revision:r.revision,date:'2026-11-23',time:'16:10'},'Staff');assert.equal(r.workflowStatus,'live');

@@ -37,7 +37,7 @@ function workflowService({db,stateRef,workCollection,links,fetcher=fetch}){
     let next=d.audit({...r,eligibility,
       eligibilityHistory:[...(r.eligibilityHistory||[]),{...eligibility,previousDecision:r.eligibility?.decision||null,previousDiagnostic:r.diagnostic||null}],
       ...(cancelDiagnostic?{diagnostic:null}:{}),
-      workflowStatus:advanced?r.workflowStatus:input.decision==='not_eligible'?'not_eligible':!cancelDiagnostic&&r.diagnostic?'diagnostic_scheduled':'pending'
+      workflowStatus:advanced||(r.workflowStatus==='awaiting_repair'&&input.decision==='eligible')?r.workflowStatus:input.decision==='not_eligible'?'not_eligible':!cancelDiagnostic&&r.diagnostic?'diagnostic_scheduled':'pending'
     },'Staff eligibility review',actor,`${input.decision==='eligible'?'Eligible':'Not eligible'}${notes?': '+notes:''}`);
     if(notify){const eventId='decision-'+input.operationId;mail(tx,eventId,'decision',next,r.email,{decision:input.decision,customerMessage:body,contactEmail:settings.contactEmail});next={...next,decisionEmail:{eventId,decision:input.decision,to:r.email,queuedAt:timestamp(),by:actor}};}
     return next;
