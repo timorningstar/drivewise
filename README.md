@@ -7,6 +7,8 @@ Downtown Ministries DriveWise vehicle repair, shop supply, invoice and payment a
 Live DriveWise admin: https://drivewise.web.app
 GitHub Pages mirror, after repo setup: https://timorningstar.github.io/drivewise/
 
+**User testing workflow (November 23):** [Editable Word](<docs/DriveWise Workflow for User Testing.docx>) and [PDF](<docs/DriveWise Workflow for User Testing.pdf>) describe the current testing app in a simple, two-page sequence for user feedback.
+
 ## Run it
 
 ```bash
