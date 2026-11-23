@@ -22,3 +22,15 @@ export function dashboardTotals(repairs) {
 export function vehicleRepairRecord(repair){
  return repair.recordType!=='shopSupply'&&repair.workflowStatus!=='not_eligible'&&repair.eligibility?.decision!=='not_eligible'&&(vehicleRepairOpen(repair)||vehicleRepairComplete(repair))
 }
+
+export function repairCompletionDate(repair){
+ const completed=repair.mechanic?.completedAt;
+ if(completed&&Number.isFinite(Date.parse(completed)))return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Indiana/Indianapolis',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(completed));
+ return /^\d{4}-\d{2}-\d{2}$/.test(repair.repairDate||'')?repair.repairDate:'';
+}
+export function completedRepairInRange(repair,{from='',through=''}={}){
+ if(from&&through&&from>through)return false;
+ if(!from&&!through)return true;
+ const date=repairCompletionDate(repair);
+ return Boolean(date&&(!from||date>=from)&&(!through||date<=through));
+}

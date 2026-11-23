@@ -985,3 +985,8 @@ dd {
 .dw-finance-nav strong { margin-right:8px; }
 .dw-finance-nav button { border:1px solid #dbe3eb; border-radius:6px; padding:9px 12px; background:#fff; color:#142f4b; font-weight:650; cursor:pointer; }
 .dw-finance-nav button[aria-current=page] { background:#142f4b; color:#fff; border-color:#142f4b; }
+
+.repair-date-range { border:1px solid #dbe3eb; border-radius:8px; padding:14px 16px; margin:0 0 20px; }
+.repair-date-range legend { font-weight:700; padding:0 6px; }
+.repair-date-range .field-grid { align-items:end; }
+.repair-date-range small { display:block; margin-top:10px; color:#55687c; }

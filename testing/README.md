@@ -106,3 +106,8 @@ Denied requests with no agreed charge or financial history are excluded from the
 
 
 The Pending Requests **Show** filter contains only **Requests and diagnostics in progress**, **Pending requests**, and **Not eligible / denied**. Completed repairs and All applications have been removed from this dropdown. Use the Completed repairs summary box or All vehicle records navigation for actual repair history.
+
+
+## Completed repair Date Range (November 23)
+
+Open the **Completed repairs** summary box and use **Date Range → From / Through**. Both endpoints are included; either can be left blank for an open-ended range. **Clear dates** restores all completed repairs. The filter applies before grouping, so both By vehicle and By vendor use the same date range. It uses repair completion date in Indiana local time, falling back to the recorded repair date for older records without a completion timestamp. Invalid reversed ranges show a message and no matching results. Filtering does not change records or the overall Completed repairs summary count.

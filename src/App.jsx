@@ -1,3 +1,4 @@
+import RepairDateRange from './RepairDateRange'
 import MechanicPage from './MechanicPage'
 import IntakeWorkflow from './IntakeWorkflow'
 import DrivewiseSetup from './DrivewiseSetup'
@@ -5,7 +6,7 @@ import CustomerApplication from './CustomerApplication'
 import DrivewiseHeader from './DrivewiseHeader'
 import CorrectionDialog, {InvoiceHistory,StatementCell} from './CorrectionDialog'
 import MoveInvoiceDialog from './MoveInvoiceDialog'
-import {vehicleRepairComplete,vehicleRepairOpen,vehicleRepairRecord} from './drivewise-dashboard'
+import {vehicleRepairComplete,vehicleRepairOpen,vehicleRepairRecord,completedRepairInRange} from './drivewise-dashboard'
 import CustomerPayments, {NotificationSettings} from './CustomerPayments'
 import { useEffect, useState, useRef } from 'react'
 import {onAuthStateChanged,signInWithCustomToken,signOut,setPersistence,browserSessionPersistence} from 'firebase/auth'
@@ -105,6 +106,7 @@ function DrivewiseAdminApp() {
   const [repairForm, setRepairForm] = useState(emptyDrivewiseRepair())
   const [activeView, setActiveView] = useState(TESTING?'workflow':'repairs')
   const [workflowSelection,setWorkflowSelection]=useState('')
+  const [completedDates,setCompletedDates]=useState({from:'',through:''})
   const [repairScope,setRepairScope] = useState('open')
   const [filters, setFilters] = useState({ vendor: 'all', statement: 'unchecked' })
   const [supplyFilters, setSupplyFilters] = useState({ vendor: 'all', statement: 'unchecked' })
@@ -838,7 +840,7 @@ function DrivewiseAdminApp() {
   const statementInvoices = openInvoices
     .filter((invoice) => invoice.statementChecked)
     .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.invoiceNumber.localeCompare(b.invoiceNumber))
-  const groupedRepairs = groupRepairs(repairs.filter((repair) => repair.recordType!=='shopSupply'&&(!TESTING||vehicleRepairRecord(repair))&&(repairScope==='all'||(repairScope==='completed'?vehicleRepairComplete(repair):(TESTING?vehicleRepairOpen(repair):!vehicleRepairComplete(repair))))), repairView)
+  const groupedRepairs = groupRepairs(repairs.filter((repair) => repair.recordType!=='shopSupply'&&(!TESTING||vehicleRepairRecord(repair))&&(repairScope==='all'||(repairScope==='completed'?(vehicleRepairComplete(repair)&&(!TESTING||completedRepairInRange(repair,completedDates))):(TESTING?vehicleRepairOpen(repair):!vehicleRepairComplete(repair))))), repairView)
   const shopSupplyRecords = repairs
     .filter(isShopSupplyRecord)
     .sort((a, b) => (b.repairDate || '').localeCompare(a.repairDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
@@ -1714,8 +1716,9 @@ function DrivewiseAdminApp() {
               </button>
             </div>
           </div>
+          {TESTING&&repairScope==='completed'&&<RepairDateRange value={completedDates} onChange={setCompletedDates}/>}
           <div className="drivewise-repair-list">
-            {groupedRepairs.length===0&&<p className="dw-empty">{repairScope==='open'?(TESTING?'No live repairs. New applications remain under Pending requests and diagnostics.':'No open vehicle repairs.'):repairScope==='completed'?'No completed vehicle repairs.':(TESTING?'No vehicle repairs recorded. Pending and denied applications remain under Pending Requests.':'No vehicle repairs recorded.')}</p>}
+            {groupedRepairs.length===0&&<p className="dw-empty">{repairScope==='open'?(TESTING?'No live repairs. New applications remain under Pending requests and diagnostics.':'No open vehicle repairs.'):repairScope==='completed'?(completedDates.from||completedDates.through?'No completed vehicle repairs in this date range.':'No completed vehicle repairs.'):(TESTING?'No vehicle repairs recorded. Pending and denied applications remain under Pending Requests.':'No vehicle repairs recorded.')}</p>}
             {groupedRepairs.map((group) => (
               <section className="repair-group" key={group.label}>
                 <h3>{group.label}</h3>
