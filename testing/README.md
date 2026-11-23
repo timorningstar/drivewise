@@ -57,3 +57,14 @@ The live app continues receiving real work. At cutover, capture a fresh consiste
 The existing central Housing/Work Orders/Programs backup screen does not imply coverage of the separate DriveWise projects. Scheduled DriveWise backup coverage remains separate work; the completed rebuild snapshot is a verified point-in-time recovery copy.
 
 New applications do not count as live repairs. The dashboard separates Pending requests / diagnostics from Live repairs. Pending emails state PENDING, give the staff review/contact/appointment steps, and open the specific application after shared sign-in. No mechanic link is issued on application submission. The customer application hides Payer; its saved default is the customer name, with later staff correction available.
+
+
+## Denied requests, customer replies and reconsideration (November 23)
+
+Denied requests are retained, not deleted. In Pending requests and diagnostics, choose **Show → Not eligible / denied**, then select the person. Denied requests do not count as live repairs or diagnostic appointments, and neither the screen nor the PDF API allows a diagnostic PDF while denied.
+
+Staff eligibility review separates **Internal eligibility notes** from **Message to customer**. When a customer email exists, **Email this decision … when saved** is selected initially; staff can edit the outgoing message or uncheck it before saving. Saving the decision and its email event is atomic. Internal notes, class participation details, vehicle details and diagnostic PDFs are not included in a customer decision email. The supplied customer email is optional, but a supplied address must be valid. Without an address, the decision can still be saved and no customer email is sent.
+
+For an already saved decision, review the message and use **Email current decision**. This records an email action without changing eligibility. The app shows the queued destination/time, retains failures for scheduled retry, and prevents duplicates on a submission retry. Test messages continue to carry TEST in their subject. Existing denied records are not automatically emailed when this feature is deployed.
+
+To reconsider, change **Staff decision** to **Eligible — arrange diagnostics**, edit the customer message or disable email if appropriate, and **Save eligibility decision**. The request returns to eligible/pending so staff can arrange a new diagnostic appointment. An old diagnostic appointment is cancelled rather than silently reactivated. Decision notes, previous decisions and prior appointment references remain in history. Superseded queued decision messages are cancelled instead of delivering an obsolete denial after reconsideration. Diagnostic digests also omit requests denied after the email was queued.

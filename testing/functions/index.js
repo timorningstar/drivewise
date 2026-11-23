@@ -686,6 +686,9 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
       await readState();await workflow.create(input,'Website application');await workflow.flush(2);sendJson(response,200,{ok:true});return;
     }
 
+    if(request.method==='POST'&&path==='/workflow/decision-email'){
+      const session=await requireAdmin(request,['full','admin','schedule']);await workflow.decisionEmail(clean(request.body?.repairId),request.body||{},session.username);await workflow.flush(2);sendJson(response,200,await drivewiseState(session));return;
+    }
     if(request.method==='POST'&&path==='/workflow/complete-diagnostic'){
       const session=await requireAdmin(request,['full','admin','schedule']);await workflow.completeDiagnostic(clean(request.body?.repairId),request.body||{},session.username);await customer.flush(1);sendJson(response,200,await drivewiseState(session));return;
     }
