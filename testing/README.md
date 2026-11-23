@@ -92,9 +92,9 @@ The automatic diagnostic email still runs Friday at 4:00 PM Indiana time. Its ta
 
 ## Compact navigation (November 23)
 
-Normal sign-in opens **Pending Requests**. Select the summary boxes to open Pending Requests, Live repairs, Completed repairs, Customer balances due or Unchecked invoices. The active box has a gold indicator and each box displays Open. Specific-request links still open their intended record.
+Normal sign-in opens **Pending Requests**. Select the summary boxes to open Pending Requests, Live repairs, Completed repairs, Customer balances due. The active box has a gold indicator and each box displays Open. Specific-request links still open their intended record.
 
-The remaining compact menu is **All vehicle records**, **Finance**, and **Setup** (Full Admin only). Finance opens Vendor invoices and groups **Vendor invoices**, **Shop supplies** and **Customer payments** in one contextual menu. Repair-authorized staff can also create shop supplies there. Accounting-only users retain their existing record/invoice/payment access without repair creation or Setup privileges. The balances and unchecked-invoice boxes are direct Finance shortcuts. The long duplicate navigation row is removed in the Testing app.
+The remaining compact menu is **All vehicle records**, **Finance**, and **Setup** (Full Admin only). Finance opens Vendor invoices and groups **Vendor invoices**, **Shop supplies** and **Customer payments** in one contextual menu. Repair-authorized staff can also create shop supplies there. Accounting-only users retain their existing record/invoice/payment access without repair creation or Setup privileges. The Customer balances due box is a direct Finance shortcut. Vendor invoices are accessed through Finance; the Unchecked invoices summary box has been removed. The long duplicate navigation row is removed in the Testing app.
 
 
 ## Denied requests in Customer payments (November 23)

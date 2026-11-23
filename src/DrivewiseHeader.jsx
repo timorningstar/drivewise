@@ -21,7 +21,7 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
           <button type="button" className="dw-stat" aria-current={current('repairs','open')?'page':undefined} onClick={()=>onRepairs('open')}><small>{TESTING?'Live repairs':'Open repairs'}</small><strong>{totals.open}</strong></button>
           <button type="button" className="dw-stat" aria-current={current('repairs','completed')?'page':undefined} onClick={()=>onRepairs('completed')}><small>Completed repairs</small><strong>{totals.completed}</strong></button>
           <button type="button" className="dw-stat" aria-current={activeView==='customerPayments'?'page':undefined} onClick={()=>onView('customerPayments')}><small>Customer balances due</small><strong>{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(totals.balanceCents/100)}</strong></button>
-          <button type="button" className="dw-stat" aria-current={activeView==='invoices'?'page':undefined} onClick={onInvoices}><small>Unchecked invoices</small><strong>{totals.unchecked}</strong></button>
+          {!TESTING&&<button type="button" className="dw-stat" aria-current={activeView==='invoices'?'page':undefined} onClick={onInvoices}><small>Unchecked invoices</small><strong>{totals.unchecked}</strong></button>}
         </div>
         {TESTING?<>
           <nav className="dw-tabs dw-compact-nav" aria-label="DriveWise navigation">
