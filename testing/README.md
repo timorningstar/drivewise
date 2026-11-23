@@ -136,3 +136,8 @@ Diagnostic list subject is **DTM Car Diagnostic Monday** (weekday derived from t
 ## Early manual send plus Friday automatic delivery (November 23)
 
 Tim clarified that an early manual email must not prevent the Friday email. **Send diagnostic list once** allows one manual email for the selected date, while Friday at 4 PM independently builds and sends the latest appointment list for the next diagnostic day. Each delivery mode prevents repeated submissions/retries for its own date. The November 30 manual list already sent does not block Friday November 27's automatic list. Legacy delivered manual events are recognized by the manual button so upgrading does not resend them; the new scheduled mode is independent. No appointments means no automatic email. This is not an unrestricted resend button.
+
+
+## Required charge before mechanic assignment (November 23)
+
+In step **4. Send live work order to mechanic**, enter the required **Agreed charge ($)** and choose **Save agreed charge**. The mechanic selector and Make live button remain disabled until a charge is saved. Enter **0.00** explicitly when no customer payment is owed. The saved charge is shown in this step; Customer payments remains available for later corrections. A payment receipt is optional. The existing server transaction independently rejects activation without a saved charge, so the requirement cannot be bypassed through the screen. Saving the charge alone does not assign a mechanic or send the mechanic email.
