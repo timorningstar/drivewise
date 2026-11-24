@@ -139,7 +139,7 @@ function DrivewiseAdminApp() {
   })
   const customerRequest = async (path,body,blob=false) => {
     const response=await drivewiseFetch(apiUrl(path),{method:blob?'GET':'POST',headers:authHeaders(),...(blob?{}:{body:JSON.stringify(body)})})
-    if(blob){if(!response.ok)throw Error('Could not download the diagnostic form.');return response.blob()}
+    if(blob){if(!response.ok)throw Error('Could not download the requested document.');return response.blob()}
     const result=await response.json()
     if(!response.ok)throw Error(result.error||'Could not save this change.')
     return result
@@ -193,6 +193,10 @@ function DrivewiseAdminApp() {
     } catch (loginError) {
       setError(loginError.message)
     }
+  }
+
+  const downloadWorkflow = async () => {
+    setError('');try{const file=await customerRequest('/api/workflow/document',undefined,true);const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download='DriveWise Workflow.docx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){setError(e.message)}
   }
 
   const openMechanicShare=async repairId=>{setError('');try{const response=await drivewiseFetch(apiUrl('/api/drivewise-mechanic-share'),{method:'POST',headers:authHeaders(),body:JSON.stringify({repairId})});const result=await readJsonPayload(response);if(!response.ok)throw Error(result.error||'Could not create mechanic link.');setShare(result);}catch(e){setError(e.message)}}
@@ -1014,7 +1018,7 @@ function DrivewiseAdminApp() {
         }
       }}/>}
       {share&&<div className="mechanic-backdrop"><section role="dialog" aria-modal="true" aria-label="Share mechanic repair link" className="panel mechanic-share"><h2>Share mechanic repair link</h2><p>The mechanic can use this link for 30 days without signing in. Creating another link replaces the previous one.</p><label>Repair link<input readOnly value={share.url}/></label><div className="header-actions"><button type="button" onClick={()=>navigator.clipboard.writeText(share.url).then(()=>setMessage('Link copied.')).catch(()=>setMessage('Select and copy the repair link.'))}>Copy link</button><a href={'mailto:?subject='+encodeURIComponent('DTM vehicle repair')+'&body='+encodeURIComponent('Please review and complete this vehicle repair: '+share.url+'\nThis link expires in 30 days.')}>Email repair link</a><button type="button" onClick={()=>setShare(null)}>Close</button></div></section></div>}
-      <DrivewiseHeader data={data} activeView={activeView} repairScope={repairScope} canRepair={canManageDrivewiseRepairs} canView={canViewDrivewiseRecords} canLegacyAdmin={canManageMainAccount}
+      <DrivewiseHeader data={data} activeView={activeView} repairScope={repairScope} canRepair={canManageDrivewiseRepairs} canView={canViewDrivewiseRecords} canLegacyAdmin={canManageMainAccount} onWorkflow={downloadWorkflow}
         onView={setActiveView} onRepairs={scope=>{setRepairScope(scope);setActiveView('repairs')}} onNewRepair={WORKFLOW?()=>setActiveView('newApplication'):startNewRepair} onNewSupply={startShopSupplies}
         onInvoices={()=>{setFilters({vendor:'all',statement:'unchecked'});setActiveView('invoices')}} onLogout={logout}/>
 

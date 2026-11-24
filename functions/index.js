@@ -779,6 +779,11 @@ function routePath(request) {
 exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:120}, async (request, response) => {
   try {
     const path = routePath(request);
+    if(path==='/workflow/document'&&request.method==='GET'){
+      await requireAdmin(request,['full','admin','schedule','accounting']);
+      const bytes=await require('node:fs/promises').readFile(require('node:path').join(__dirname,'assets','DriveWise Workflow.docx'));
+      response.set('Cache-Control','private, no-store').set('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document').set('Content-Disposition','attachment; filename="DriveWise Workflow.docx"').send(bytes);return;
+    }
     if(path==='/application/start'&&request.method==='GET'){
       const ip=hashToken(request.ip||'unknown'),hour=Math.floor(Date.now()/3600000),rate=db.collection('applicationRate').doc(ip+'-'+hour);
       await db.runTransaction(async tx=>{const row=await tx.get(rate);if((row.data()?.count||0)>=12)throw Object.assign(Error('Please try again later or contact DTM.'),{statusCode:429});tx.set(rate,{count:(row.data()?.count||0)+1,expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});});
