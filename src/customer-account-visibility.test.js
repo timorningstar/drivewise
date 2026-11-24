@@ -38,11 +38,11 @@ test('In Diagnostics counts scheduled diagnostic requests only',async()=>{
 
 test('diagnostic options only list configured weekday, skip full weeks/past times, retain own slot and release denied slots',async()=>{
  const{diagnosticAvailability:available}=await import('./diagnostic-availability.js');
- const settings={diagnosticDay:1,diagnosticTimes:['15:30','15:50','16:10']},now=new Date('2026-11-23T20:40:00Z');
+ const settings={diagnosticDay:1,diagnosticTimes:['15:30','15:50','16:10']},now=new Date('2026-11-20T20:59:00Z');
  const booked={id:'other',workflowStatus:'diagnostic_scheduled',diagnostic:{date:'2026-11-23',time:'15:50'}};
- let options=available([booked],settings,'new',now);assert.equal(options[0].date,'2026-11-23');assert.deepEqual(options[0].times,['16:10']);
+ let options=available([booked],settings,'new',now);assert.equal(options[0].date,'2026-11-23');assert.deepEqual(options[0].times,['15:30','16:10']);
  for(const option of options)assert.equal(new Date(option.date+'T12:00:00Z').getUTCDay(),1);
- options=available([booked,{...booked,id:'third',diagnostic:{date:'2026-11-23',time:'16:10'}}],settings,'new',now);assert.equal(options[0].date,'2026-11-30');
+ options=available([booked,{...booked,id:'third',diagnostic:{date:'2026-11-23',time:'16:10'}},{...booked,id:'fourth',diagnostic:{date:'2026-11-23',time:'15:30'}}],settings,'new',now);assert.equal(options[0].date,'2026-11-30');
  assert(available([booked],settings,'other',now)[0].times.includes('15:50'));
  assert(available([{...booked,workflowStatus:'not_eligible'}],settings,'new',now)[0].times.includes('15:50'));
  assert.equal(available([],settings,'new',new Date('2026-11-23T22:00:00Z'))[0].date,'2026-11-30');
