@@ -13,8 +13,10 @@ const {onRequest} = require("firebase-functions/v2/https");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const logger = require("firebase-functions/logger");
 
+const {workflowService}=require("./intake-workflow");
+
 admin.initializeApp();
-setGlobalOptions({maxInstances: 10});
+setGlobalOptions({maxInstances: 1});
 
 const db = admin.firestore();
 const storage = admin.storage();
@@ -30,6 +32,7 @@ const mechanicLinks=db.collection('drivewiseMechanicLinks');
 const customer=customerWorkflow({db,stateRef,workCollection:mechanicWork});
 const corrections=correctionService({db,stateRef,logChange:logStateChange});
 const moveInvoice=invoiceTransferService({db,stateRef,logChange:logStateChange});
+const workflow=workflowService({db,stateRef,workCollection:mechanicWork,links:mechanicLinks,customer});
 const mechanic=createMechanicService({
  repo:{link:async key=>(await mechanicLinks.doc(key).get()).data(),work:async id=>(await mechanicWork.doc(id).get()).data(),putLink:(key,value)=>mechanicLinks.doc(key).create(value),mutate:(id,change)=>customer.mutateWork(id,change)},
  readRepair:async id=>(await readState()).repairs.find(r=>r.id===id),
@@ -241,6 +244,7 @@ async function drivewiseState(session) {
       }))
       : [],
     repairs: session.role === "recovery" ? [] : await enrichDrivewiseRepairs((state.repairs || []).map(repair=>({...repair,mechanic:progress.get(repair.id),customerAccount:customerState.accounts[repair.id]||null}))),
+    workflow:await workflow.snapshot(),
     notificationSettings:session.role==='full'?customerState.notifications:null,
     paymentBatches: session.role === "recovery" ? [] : state.paymentBatches || [],
     adminLog: state.adminLog || [],
@@ -385,10 +389,7 @@ async function saveDrivewiseRepair(request, session) {
     return {ok: false, error: error.message};
   }
 
-  if(existingIndex<0&&repair.recordType!=="shopSupply"){
-    await customer.createRepair(repair,session.username,initialCharge,logStateChange);
-    return drivewiseState(session);
-  }
+  if(existingIndex<0&&repair.recordType!=="shopSupply")throw Object.assign(Error("Create a pending customer application first."),{statusCode:409});
   if(existingIndex>=0){
     await corrections.saveExisting(repair,request.body?.repair?.revision,initialCharge,session.username);
     return drivewiseState(session);
@@ -778,6 +779,40 @@ function routePath(request) {
 exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:120}, async (request, response) => {
   try {
     const path = routePath(request);
+    if(path==='/application/start'&&request.method==='GET'){
+      const ip=hashToken(request.ip||'unknown'),hour=Math.floor(Date.now()/3600000),rate=db.collection('applicationRate').doc(ip+'-'+hour);
+      await db.runTransaction(async tx=>{const row=await tx.get(rate);if((row.data()?.count||0)>=12)throw Object.assign(Error('Please try again later or contact DTM.'),{statusCode:429});tx.set(rate,{count:(row.data()?.count||0)+1,expiresAt:admin.firestore.Timestamp.fromMillis(Date.now()+86400000)});});
+      const challenge=crypto.randomBytes(32).toString('hex');await db.collection('applicationChallenges').doc(hashToken(challenge)).create({ip,createdAt:Date.now(),expiresAt:Date.now()+3600000});sendJson(response,200,{challenge});return;
+    }
+    if(path==='/application/submit'&&request.method==='POST'){
+      if(!['https://drivewise.web.app','https://downtownmin.org','https://www.downtownmin.org'].includes(request.get('origin')))throw Object.assign(Error('Open the DTM application form directly.'),{statusCode:403});
+      const input=request.body||{};if(input.website||!/^[a-f0-9]{64}$/.test(input.challenge||''))throw Object.assign(Error('Please reopen the application form.'),{statusCode:400});
+      const ref=db.collection('applicationChallenges').doc(hashToken(input.challenge));
+      await db.runTransaction(async tx=>{const row=await tx.get(ref),value=row.data();if(!value||value.ip!==hashToken(request.ip||'unknown')||value.expiresAt<Date.now()||value.createdAt>Date.now()-2000||(value.operationId&&value.operationId!==input.operationId))throw Object.assign(Error('This application session expired. Reopen the form.'),{statusCode:400});tx.update(ref,{operationId:input.operationId});});
+      await readState();await workflow.create(input,'Website application');await workflow.flush(2);sendJson(response,200,{ok:true});return;
+    }
+
+    if(request.method==='POST'&&path==='/workflow/decision-email'){
+      const session=await requireAdmin(request,['full','admin','schedule']);await workflow.decisionEmail(clean(request.body?.repairId),request.body||{},session.username);await workflow.flush(2);sendJson(response,200,await drivewiseState(session));return;
+    }
+    if(request.method==='POST'&&path==='/workflow/complete-diagnostic'){
+      const session=await requireAdmin(request,['full','admin','schedule']);await workflow.completeDiagnostic(clean(request.body?.repairId),request.body||{},session.username);await customer.flush(1);sendJson(response,200,await drivewiseState(session));return;
+    }
+    if(request.method==='POST'&&path==='/workflow/settings'){
+      const session=await requireAdmin(request,['full']);await workflow.settings(request.body||{},session.username);sendJson(response,200,await drivewiseState(session));return;
+    }
+    if(request.method==='POST'&&path==='/workflow/digest'){
+      await requireAdmin(request,['full']);const result=await workflow.digest(request.body?.date);const delivery=await workflow.flush(1);sendJson(response,200,{ok:true,...result,...delivery});return;
+    }
+    if(request.method==='GET'&&path==='/workflow/pdf'){
+      await requireAdmin(request,['full','admin','schedule','accounting']);response.set('Content-Type','application/pdf').set('Content-Disposition','attachment; filename="DTM-diagnostic.pdf"').send(await workflow.pdf(clean(request.query?.repairId)));return;
+    }
+    if(request.method==='POST'&&['/workflow/create','/workflow/edit','/workflow/review','/workflow/schedule','/workflow/diagnostic','/workflow/activate'].includes(path)){
+      const session=await requireAdmin(request,['full','admin','schedule']),input=request.body||{},action=path.split('/').pop();
+      if(action==='create')await workflow.create(input,session.username);else await workflow[action](clean(input.repairId),input,session.username);
+      await workflow.flush(2);sendJson(response,200,await drivewiseState(session));return;
+    }
+
     if(request.method==='GET'&&path==='/drivewise-service-metrics'){
       const token=request.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
       if(!await verifyMetricsCaller(token)){sendJson(response,403,{error:'DTM reporting service identity required.'});return;}
@@ -821,7 +856,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
     if(request.method==='POST'&&['/drivewise-mechanic-share','/drivewise-mechanic-revoke'].includes(path)){
       const session=await requireAdmin(request,['full','admin','schedule']);
       const id=clean(request.body?.repairId);if(!/^[a-zA-Z0-9_-]{1,120}$/.test(id)){sendJson(response,400,{error:'Choose a vehicle repair.'});return;}
-      if(path.endsWith('-share'))await customer.assertOpen(id);
+      if(path.endsWith('-share')){const current=(await readState()).repairs.find(r=>r.id===id);if(current?.workflowStatus!=='live')throw Object.assign(Error('Make the work order live and choose a mechanic in Applications and diagnostics.'),{statusCode:409});await customer.assertOpen(id);}
       const result=path.endsWith('-share')?await mechanic.issue(id,session.username):await mechanic.revoke(id);sendJson(response,200,result);return;
     }
 
@@ -939,6 +974,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
 });
 
 exports.drivewiseNotificationRetry=onSchedule({schedule:'every 15 minutes',region:'us-central1',maxInstances:1,timeoutSeconds:540},async()=>{
+  await workflow.flush(5);
   const result=await customer.flush(5);
   if(result.attempted>result.sent)logger.warn('DriveWise notification delivery remains pending.',result);
 });
@@ -1001,3 +1037,5 @@ function credentialMatches(record, passwordHash, plainPassword = "") {
     || (!record?.passwordHash && record?.password && record.password === plainPassword)
   );
 }
+
+exports.drivewiseDiagnosticDigest=onSchedule({schedule:"0 16 * * 5",timeZone:"America/Indiana/Indianapolis",region:"us-central1",maxInstances:1},async()=>{await workflow.digest();await workflow.flush(1);});

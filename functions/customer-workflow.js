@@ -1,6 +1,7 @@
+const {readSettings}=require('./notification-settings');
 const {changeAccount,summarize,notificationMessage,cents}=require('./customer-account');
 const endpoint='https://dtmapp.web.app/api/dtm-access/drivewise/mail';
-const defaultRecipients=['t1@downtownmin.org'];
+const defaultRecipients=['carrepair@downtownmin.org'];
 const fail=(message,statusCode=400)=>{throw Object.assign(Error(message),{statusCode});};
 function recipients(input) {
   const values=[...new Set((Array.isArray(input)?input:String(input||'').split(/[;,\n]/)).map(v=>String(v).trim().toLowerCase()).filter(Boolean))];
@@ -8,7 +9,7 @@ function recipients(input) {
   return values;
 }
 function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
-  const accounts=db.collection('drivewiseCustomerAccounts'),outbox=db.collection('drivewiseNotifications'),settings=db.collection('drivewiseSettings').doc('notifications');
+  const accounts=db.collection('drivewiseCustomerAccounts'),outbox=db.collection('drivewiseNotifications'),settings=db.collection('drivewiseSettings').doc('notifications'),workflowSettings=db.collection('drivewiseSettings').doc('workflow');
   const settingsValue=snapshot=>snapshot.data()?.recipients||defaultRecipients;
   return {
     // Save a new request and any initial agreed charge in one transaction.
@@ -38,12 +39,13 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
     async mutateAccount(id,input,actor) {
       if(!/^[a-zA-Z0-9_-]{1,120}$/.test(id||''))fail('Choose a repair.');
       return db.runTransaction(async tx=>{
-        const [state,account,work,config]=await Promise.all([tx.get(stateRef()),tx.get(accounts.doc(id)),tx.get(workCollection.doc(id)),tx.get(settings)]);
+        const [state,account,work,config]=await Promise.all([tx.get(stateRef()),tx.get(accounts.doc(id)),tx.get(workCollection.doc(id)),tx.get(workflowSettings)]);
         const repair=state.data()?.state?.repairs?.find(r=>r.id===id);
         if(!repair||repair.recordType==='shopSupply'||(repair.historicalComplete&&!repair.correctionOpen&&!account.exists))fail('Reopen historical repairs for corrections before creating their customer account.',409);
+        if((repair.workflowStatus==='not_eligible'||repair.eligibility?.decision==='not_eligible')&&input.action!=='void')fail('This request was denied. New customer charges and payments are not allowed; existing payment history is retained.',409);
         const result=changeAccount(account.data(),input,actor,work.data()?.completedAt||(repair.historicalComplete?'historical-complete':''));
         tx.set(accounts.doc(id),result.account);
-        if(result.event)tx.create(outbox.doc(result.event.id),{...result.event,repairId:id,recipients:settingsValue(config),sentAt:null,attempts:0});
+        if(result.event)tx.create(outbox.doc(result.event.id),{...result.event,repairId:id,recipients:[readSettings(config.data()).accountingEmail],sentAt:null,attempts:0});
         return result.account;
       });
     },
@@ -52,14 +54,14 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
     async mutateWork(id,change) {
       return db.runTransaction(async tx=>{
         const ref=workCollection.doc(id);
-        const [work,account,config]=await Promise.all([tx.get(ref),tx.get(accounts.doc(id)),tx.get(settings)]);
+        const [work,account,config]=await Promise.all([tx.get(ref),tx.get(accounts.doc(id)),tx.get(workflowSettings)]);
         const previous=work.data()||{},next=change(previous);
         tx.set(ref,next);
         if(next.completedAt&&!previous.completedAt) {
           const summary=summarize(account.data(),next.completedAt);
           tx.set(accounts.doc(id),summary);
           const event={id:'completion-'+id,kind:'completion',repairId:id,createdAt:new Date().toISOString(),workSnapshot:next,accountSnapshot:summary,
-            recipients:settingsValue(config),sentAt:null,attempts:0};
+            recipients:readSettings(config.data()).carRepairRequestEmails,sentAt:null,attempts:0};
           tx.create(outbox.doc(event.id),event);
         }
         return next;
@@ -85,7 +87,7 @@ function customerWorkflow({db,stateRef,workCollection,fetcher=fetch}) {
             headers:{'Metadata-Flavor':'Google'},signal:AbortSignal.timeout(10000)});
           if(!identity.ok)throw Error('Cloud identity unavailable.');
           const result=await fetcher(endpoint,{method:'POST',headers:{Authorization:'Bearer '+await identity.text(),Origin:'https://drivewise.web.app','Content-Type':'application/json'},
-            body:JSON.stringify(notificationMessage(claim,repair)),signal:AbortSignal.timeout(60000)});
+            body:JSON.stringify({...notificationMessage(claim,repair),id:"live-"+claim.id}),signal:AbortSignal.timeout(60000)});
           if(!result.ok)throw Error('Notification sender unavailable.');
           await row.ref.update({sentAt:new Date().toISOString(),leaseUntil:0,lastError:''});sent++;
         } catch {

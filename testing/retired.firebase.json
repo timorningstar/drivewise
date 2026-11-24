@@ -1,0 +1,6 @@
+{
+  "hosting": {
+    "site":"dtm-drivewise-test",
+    "redirects":[{"source":"/**","destination":"https://drivewise.web.app","type":302}]
+  }
+}

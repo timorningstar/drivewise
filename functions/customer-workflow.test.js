@@ -33,7 +33,7 @@ test('failed delivery is durable and retryable without losing payment or origina
  assert.deepEqual(await f.workflow.flush(),{sent:0,attempted:1});
  assert.equal((await f.workflow.snapshot()).accounts.r1.paidCents,2500);
  await f.workflow.saveSettings('later@example.test','Full Admin');f.setMail(true);await f.workflow.retry();assert.equal((await f.workflow.flush()).sent,1);
- assert.deepEqual(f.sent[0].recipients,['t1@downtownmin.org']);assert.equal((await f.workflow.snapshot()).notifications.pending,0);
+ assert.deepEqual(f.sent[0].recipients,['accounting@downtownmin.org']);assert.equal((await f.workflow.snapshot()).notifications.pending,0);
  assert.equal((await f.workflow.flush()).attempted,0);
 });
 test('historical records, supplies and unknown IDs never receive customer ledger writes',async()=>{

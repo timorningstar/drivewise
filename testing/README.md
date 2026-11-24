@@ -1,4 +1,6 @@
-# DriveWise Testing
+# DriveWise Testing archive
+
+**November 24 cutover:** This pilot has been promoted to https://drivewise.web.app with original production history retained and no test transactions imported. The former test URL redirects to live. Test email schedules are paused and the isolated test database is retained as an archive. Use root README and docs/Live-Cutover-2026-11-24.md for current production entry points. The historical pilot notes below describe testing, not an active second production app.
 
 Deployed November 22, 2026. This is the separate new-workflow pilot, with no production customer records imported.
 

@@ -1,4 +1,5 @@
-const TESTING=import.meta.env.VITE_DRIVEWISE_TESTING===true
+const WORKFLOW = true
+const TESTING = import.meta.env.VITE_DRIVEWISE_TESTING === true
 import {dashboardTotals} from './drivewise-dashboard'
 export default function DrivewiseHeader({data,activeView,repairScope,canRepair,canView,canLegacyAdmin,onView,onRepairs,onNewRepair,onNewSupply,onInvoices,onLogout}) {
   const totals=dashboardTotals(data.repairs||[])
@@ -13,18 +14,18 @@ export default function DrivewiseHeader({data,activeView,repairScope,canRepair,c
     </div></div>
     <div className="dw-shell">
       <div className="dw-intro"><div><h1>DriveWise{TESTING?' Testing':''}</h1><p>{canView?'Submit, share, and track vehicle repairs.':data.role==='recovery'?'Recover the full-admin account without opening DriveWise records.':'Sign in to manage vehicle repairs.'}</p></div>
-        {canRepair&&<button className="primary-action dw-new" type="button" onClick={supply?onNewSupply:onNewRepair}>{supply?'+ New shop supplies':TESTING?'+ New request':'+ New repair'}</button>}
+        {canRepair&&<button className="primary-action dw-new" type="button" onClick={supply?onNewSupply:onNewRepair}>{supply?'+ New shop supplies':WORKFLOW?'+ New request':'+ New repair'}</button>}
       </div>
       {canView&&<>
-        <div className={TESTING?"dw-stats dw-test-stats":"dw-stats"} aria-label="DriveWise summary">
-          {TESTING&&<button type="button" className="dw-stat" aria-current={activeView==='workflow'?'page':undefined} onClick={()=>onView('workflow')}><small>Pending Requests</small><strong>{totals.pending}</strong></button>}
-          {TESTING&&<button type="button" className="dw-stat" aria-current={activeView==='diagnostics'?'page':undefined} onClick={()=>onView('diagnostics')}><small>In Diagnostics</small><strong>{totals.diagnostics}</strong></button>}
-          <button type="button" className="dw-stat" aria-current={current('repairs','open')?'page':undefined} onClick={()=>onRepairs('open')}><small>{TESTING?'Live repairs':'Open repairs'}</small><strong>{totals.open}</strong></button>
+        <div className={WORKFLOW?"dw-stats dw-test-stats":"dw-stats"} aria-label="DriveWise summary">
+          {WORKFLOW&&<button type="button" className="dw-stat" aria-current={activeView==='workflow'?'page':undefined} onClick={()=>onView('workflow')}><small>Pending Requests</small><strong>{totals.pending}</strong></button>}
+          {WORKFLOW&&<button type="button" className="dw-stat" aria-current={activeView==='diagnostics'?'page':undefined} onClick={()=>onView('diagnostics')}><small>In Diagnostics</small><strong>{totals.diagnostics}</strong></button>}
+          <button type="button" className="dw-stat" aria-current={current('repairs','open')?'page':undefined} onClick={()=>onRepairs('open')}><small>{WORKFLOW?'Live repairs':'Open repairs'}</small><strong>{totals.open}</strong></button>
           <button type="button" className="dw-stat" aria-current={current('repairs','completed')?'page':undefined} onClick={()=>onRepairs('completed')}><small>Completed repairs</small><strong>{totals.completed}</strong></button>
           <button type="button" className="dw-stat" aria-current={activeView==='customerPayments'?'page':undefined} onClick={()=>onView('customerPayments')}><small>Customer balances due</small><strong>{new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(totals.balanceCents/100)}</strong></button>
-          {!TESTING&&<button type="button" className="dw-stat" aria-current={activeView==='invoices'?'page':undefined} onClick={onInvoices}><small>Unchecked invoices</small><strong>{totals.unchecked}</strong></button>}
+          {!WORKFLOW&&<button type="button" className="dw-stat" aria-current={activeView==='invoices'?'page':undefined} onClick={onInvoices}><small>Unchecked invoices</small><strong>{totals.unchecked}</strong></button>}
         </div>
-        {TESTING?<>
+        {WORKFLOW?<>
           <nav className="dw-tabs dw-compact-nav" aria-label="DriveWise navigation">
             {tab('All vehicle records','repairs','all')}
             <button type="button" aria-current={finance?'page':undefined} onClick={onInvoices}>Finance</button>
