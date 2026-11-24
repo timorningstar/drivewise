@@ -595,6 +595,7 @@ function sanitizeDrivewiseRepair(input) {
     updatedAt: new Date().toISOString(),
     repairDate: clean(input.repairDate),
     ownerName: clean(input.ownerName),
+    ...require("./intake-domain").vehicleIdentifiers(input),
     year,
     make,
     model,
@@ -794,7 +795,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
       const input=request.body||{};if(input.website||!/^[a-f0-9]{64}$/.test(input.challenge||''))throw Object.assign(Error('Please reopen the application form.'),{statusCode:400});
       const ref=db.collection('applicationChallenges').doc(hashToken(input.challenge));
       await db.runTransaction(async tx=>{const row=await tx.get(ref),value=row.data();if(!value||value.ip!==hashToken(request.ip||'unknown')||value.expiresAt<Date.now()||value.createdAt>Date.now()-2000||(value.operationId&&value.operationId!==input.operationId))throw Object.assign(Error('This application session expired. Reopen the form.'),{statusCode:400});tx.update(ref,{operationId:input.operationId});});
-      await readState();await workflow.create(input,'Website application');await workflow.flush(2);sendJson(response,200,{ok:true});return;
+      await readState();await workflow.submitApplication(input,'Website application');sendJson(response,200,{ok:true});return;
     }
 
     if(request.method==='POST'&&path==='/workflow/decision-email'){

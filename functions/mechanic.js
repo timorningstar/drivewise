@@ -3,7 +3,7 @@ const fail=(message,statusCode=400)=>{throw Object.assign(new Error(message),{st
 const hash=token=>crypto.createHash('sha256').update(token).digest('hex');
 const limit=4500000;
 const isInvoice=file=>(file.kind==='invoice'||!file.kind)&&Boolean(file.vendor?.trim()&&file.invoiceNumber?.trim());
-function publicRepair(repair){return {id:repair.id,date:repair.repairDate,owner:repair.ownerName,vehicle:[repair.year,repair.make,repair.model].filter(Boolean).join(' '),details:repair.neededRepairs,notes:repair.notes||'',mechanic:repair.assignedMechanic?.name||'',diagnosticNotes:repair.diagnosticNotes||'',partsOrdered:repair.partsOrdered||''};}
+function publicRepair(repair){return {id:repair.id,date:repair.repairDate,owner:repair.ownerName,...(repair.vin?{vin:repair.vin}:{}),...(repair.mileage!==undefined&&repair.mileage!==null?{mileage:repair.mileage}:{}),vehicle:[repair.year,repair.make,repair.model].filter(Boolean).join(' '),details:repair.neededRepairs,notes:repair.notes||'',mechanic:repair.assignedMechanic?.name||'',diagnosticNotes:repair.diagnosticNotes||'',partsOrdered:repair.partsOrdered||''};}
 function fileBytes(input){
  const type=input.type,name=String(input.name||'').replaceAll('\n',' ').replaceAll('\r',' ').replaceAll('/',' ').replaceAll('\\',' ').trim().slice(0,150),data=input.data;
  if(!name||typeof data!=='string'||data.length>6000000||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))fail('Choose an image or PDF, up to 4.5 MB.');

@@ -210,3 +210,30 @@ test('production workflow emails use live URLs without test branding and preserv
  const pending=await message({id:'pending-sample',kind:'pending',repair,recipients:['sample@example.test']});assert(pending.text.includes('https://drivewise.web.app/?application=sample-live#dtm-hub'));assert(!pending.text.includes('TEST ENVIRONMENT'));assert(!pending.id.startsWith('test-'));
  const mail=await message({id:'assignment-sample',kind:'assignment',repair,recipients:['mechanic@example.test'],replyTo:['staff@example.test'],mechanicUrl:'https://drivewise.web.app/#mechanic=sample'});assert.deepEqual(mail.replyTo,['staff@example.test']);assert(!mail.subject.includes('TEST'));assert(!mail.text.includes('dtm-drivewise-test'));
 });
+
+const fullApplication=()=>({...application(),formVersion:'2',firstName:'Sample',lastName:'Customer',participant:'yes',vin:'1hgcm82633a004352',mileage:'123456',referringAgency:'EMAIL-ONLY-AGENCY',referralPhone:'EMAIL-ONLY-PHONE',referralEmail:'email-only-ref@example.test',bestContactTime:'EMAIL-ONLY-CONTACT-TIME',driversLicense:'yes',registered:'yes',insured:'no',vehicleLocation:'EMAIL-ONLY-LOCATION',mechanicDiagnosis:'yes',recentRepairs:'EMAIL-ONLY-REPAIR-HISTORY',primaryTransportation:'yes',dailyLife:'EMAIL-ONLY-DAILY-LIFE'});
+const emailOnlyValues=input=>['referringAgency','referralPhone','referralEmail','bestContactTime','vehicleLocation','recentRepairs','dailyLife'].map(key=>input[key]);
+test('full application emails all answers to the configured group but stores only existing fields plus VIN/mileage',async()=>{
+ const sent=[],f=fixture({fetcher:async(url,options)=>{if(url.startsWith('http://metadata'))return new Response('sample-identity');sent.push(JSON.parse(options.body));return new Response('{}');}}),input=fullApplication();
+ f.rows.set('drivewiseSettings/workflow',{carRepairRequestEmails:['one@example.test','two@example.test','three@example.test']});
+ const r=await f.service.submitApplication(input,'Website application');assert.equal(r.workflowStatus,'pending');assert.equal(r.vin,'1HGCM82633A004352');assert.equal(r.mileage,123456);assert.equal(r.ownerName,'Sample Customer');assert.equal(r.payer,r.ownerName);
+ assert.equal(sent.length,1);assert.deepEqual(sent[0].recipients,['one@example.test','two@example.test','three@example.test']);for(const value of emailOnlyValues(input))assert(sent[0].text.includes(value));assert(sent[0].text.includes('VIN #: 1HGCM82633A004352'));assert(sent[0].text.includes('Mileage: 123456'));assert(sent[0].text.includes('Vehicle currently insured: No'));
+ const stored=JSON.stringify([...f.rows.values()]);for(const value of emailOnlyValues(input))assert(!stored.includes(value));for(const key of ['participant','insured','vehicleLocation','primaryTransportation'])assert(!Object.hasOwn(r,key));
+ await f.service.submitApplication(input,'Website application');assert.equal(sent.length,1);assert.equal(f.rows.get('appState/drivewise').state.repairs.length,1);
+});
+test('failed full email retains the form retry path, never queues extra answers or sends an incomplete automatic email',async()=>{
+ let fail=true;const sent=[],f=fixture({fetcher:async(url,options)=>{if(url.startsWith('http://metadata'))return new Response('sample-identity');sent.push(JSON.parse(options.body));return new Response('{}',{status:fail?503:200});}}),input=fullApplication();
+ await assert.rejects(f.service.submitApplication(input,'Website application'),{statusCode:503});let stored=JSON.stringify([...f.rows.values()]);for(const value of emailOnlyValues(input))assert(!stored.includes(value));assert.equal((await f.service.flush()).attempted,0);assert.equal(sent.length,1);
+ fail=false;input.phone='555-0200';const r=await f.service.submitApplication(input,'Website application');assert.equal(r.phone,'555-0200');assert.equal(f.rows.get('appState/drivewise').state.repairs.length,1);assert.equal(sent.length,2);assert(sent[1].text.includes('Phone: 555-0200'));assert(f.rows.get('drivewiseWorkflowNotifications/pending-'+r.id).sentAt);
+ stored=JSON.stringify([...f.rows.values()]);for(const value of emailOnlyValues(input))assert(!stored.includes(value));
+});
+test('referral application keeps only generic program context and numeric zero mileage; required choices and identifiers validate',async()=>{
+ const f=fixture({fetcher:async url=>new Response(url.startsWith('http://metadata')?'sample-identity':'{}')}),input={...fullApplication(),participant:'no',classAttendance:'IGNORED-CLASS-INPUT',mileage:'0'};
+ const r=await f.service.submitApplication(input,'Website application');assert.equal(r.classAttendance,'Partner agency referral');assert.equal(r.mileage,0);assert(!JSON.stringify([...f.rows.values()]).includes('IGNORED-CLASS-INPUT'));
+ for(const change of [{vin:''},{mileage:''},{mileage:'-1'},{mileage:'1.5'},{registered:''},{referringAgency:''},{referralEmail:'invalid'},{formVersion:undefined}])await assert.rejects(f.service.submitApplication({...input,...change,operationId:randomUUID()},'Website application'),{statusCode:400});
+});
+test('editing legacy records without identifier fields does not overwrite VIN/mileage, and staff can correct identifiers',async()=>{
+ const f=fixture();let r=await f.service.create({...application(),vin:'ABC123',mileage:'0'},'Staff');assert.equal(r.mileage,0);
+ r=await f.service.edit(r.id,{...application(),operationId:randomUUID(),revision:r.revision},'Staff');assert.equal(r.vin,'ABC123');assert.equal(r.mileage,0);
+ r=await f.service.edit(r.id,{...application(),operationId:randomUUID(),revision:r.revision,vin:'xyz789',mileage:'99'},'Staff');assert.equal(r.vin,'XYZ789');assert.equal(r.mileage,99);
+});

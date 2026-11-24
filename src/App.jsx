@@ -1149,6 +1149,7 @@ function DrivewiseAdminApp() {
             </label>
           </div>
 
+          {repairForm.recordType!=='shopSupply'&&<div className="field-grid"><label>VIN #<input maxLength={30} value={repairForm.vin??''} disabled={isRepairFormReadOnly} onChange={e=>setRepairForm(r=>({...r,vin:e.target.value}))}/></label><label>Mileage<input type="number" min="0" max="99999999" step="1" value={repairForm.mileage??''} disabled={isRepairFormReadOnly} onChange={e=>setRepairForm(r=>({...r,mileage:e.target.value}))}/></label></div>}
           {needsVehicleDecision && (
             <section className="vehicle-match-alert">
               <div>
@@ -1867,6 +1868,8 @@ function emptyDrivewiseRepair() {
     year: '',
     make: '',
     model: '',
+    vin: '',
+    mileage: '',
     vehicleInfo: '',
     vehicleTrackingId: '',
     payer: '',

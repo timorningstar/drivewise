@@ -1,0 +1,27 @@
+.dw-application{min-height:100vh;background:#fff;color:#19222d;padding:46px 22px;font-family:Arial,Helvetica,sans-serif}
+.dw-application .application-paper{max-width:740px;margin:0 auto;background:#fff}
+.dw-application h1{font-size:32px;line-height:1.2;margin:0 0 42px;color:#101a2a}
+.dw-application .application-introduction{font-size:15px;line-height:1.65;margin:0 0 28px;color:#303936}
+.dw-application .application-section{display:flex;flex-direction:column;gap:23px;margin:0 0 32px}
+.dw-application .application-section:first-of-type{border-top:3px solid #131a21;padding-top:26px}
+.dw-application h2{border-bottom:3px solid #131a21;font-size:19px;line-height:1.4;padding:0 0 9px;margin:0 0 3px;font-weight:600}
+.dw-application .application-field{display:flex;flex-direction:column;gap:9px;font-weight:500;font-size:15px;color:#172536}
+.dw-application .application-required{font-size:12px;font-weight:400;color:#58625e}
+.dw-application .application-field small{color:#5c6660;font-size:12px;line-height:1.4}
+.dw-application input:not([type=radio]),.dw-application textarea{box-sizing:border-box;width:100%;border:1px solid transparent;border-radius:25px;background:#e9eae6;box-shadow:none;color:#182222;padding:13px 18px;min-height:46px;font:inherit;line-height:1.4}
+.dw-application textarea{min-height:112px;border-radius:21px;resize:vertical}
+.dw-application input:focus-visible,.dw-application textarea:focus-visible{outline:2px solid #1c4766;outline-offset:3px;background:#f4f5f1}
+.dw-application .application-name,.dw-application .application-choice{border:0;padding:0;margin:0;min-width:0}
+.dw-application legend{font-size:15px;font-weight:500;padding:0;margin:0 0 12px;color:#172536}
+.dw-application .application-name-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.dw-application .application-name-grid .application-field{font-size:13px}
+.dw-application .application-vehicle-grid{display:grid;grid-template-columns:100px 1fr 1fr;gap:13px}
+.dw-application .application-choice>div{display:flex;gap:12px}
+.dw-application .application-choice label{position:relative;cursor:pointer;display:block}
+.dw-application .application-choice input{position:absolute;opacity:0;width:1px;height:1px}
+.dw-application .application-choice label span{display:block;border:1px solid #738078;border-radius:22px;background:#edf0e9;font-size:13px;padding:7px 20px;min-width:24px;text-align:center;color:#24342d}
+.dw-application .application-choice input:checked+span{background:#17354c;color:#fff;border-color:#17354c}
+.dw-application .application-choice input:focus-visible+span{outline:2px solid #1c4766;outline-offset:3px}
+.dw-application .application-submit{display:block;background:#17354c;border:1px solid #17354c;border-radius:3px;color:#fff;font-size:16px;font-weight:600;padding:15px 38px;min-width:160px;margin:34px auto 10px;cursor:pointer}
+.dw-application .application-submit:disabled{opacity:.5;cursor:wait}
+@media(max-width:520px){.dw-application{padding:30px 18px}.dw-application h1{font-size:28px;margin-bottom:28px}.dw-application .application-name-grid{gap:12px}.dw-application .application-vehicle-grid{grid-template-columns:1fr}.dw-application .application-section{gap:21px}}
