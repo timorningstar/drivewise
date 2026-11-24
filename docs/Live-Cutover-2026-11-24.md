@@ -21,3 +21,7 @@ Production configuration is root firebase.json/functions and normal npm run buil
 For rollback, retain pre-cutover code efa818b plus earlier production Hosting release, encrypted snapshot and current post-cutover data. Capture all new production changes before any rollback; never replace current appState with the testing state. The in-place migration changed only historical workflow status and added workflow configuration. Reversing the code route does not require deleting preserved historical records.
 
 Private invoice URLs require the production runtime to sign its own short-lived URLs. The custom IAM role projects/dtmcleaners/roles/drivewiseBlobSigner grants only iam.serviceAccounts.signBlob on the runtime's own service account. No storage object was made public and no key file was created.
+
+## Verified release
+
+Production/source tests:77 passed; Hub:24 passed; targeted handoff/mail:8 passed. Authenticated live verification succeeded (execution7j568): current Hub grant checks, live PKCE round trip/replay denial,100 original records/92 completed historical repairs/8 shop supplies, no pending/live test records, three real private invoice downloads, current T2/Accounting grants enforced, Accounting create/settings denied, anonymous state denied and invalid intake rejected. Verification made no business writes and sent no emails. Temporary verification job removed. Shared relay00040-ng6 serves100% traffic, service/revision max1. Production bundle index-DGNgAokV.js; Hub main.2434fd7d.js. All150 original object generations remained unchanged.
