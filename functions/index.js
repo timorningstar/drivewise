@@ -1,3 +1,4 @@
+const {assertAccountingCorrection}=require('./correction-access');
 const {assertRepairEditable} = require("./repair-status");
 const {createMechanicService} = require("./mechanic");
 const {hubSession} = require("./hub-access");
@@ -350,6 +351,7 @@ async function saveDrivewiseRepair(request, session) {
   const state = await readState();
   let repair = sanitizeDrivewiseRepair(request.body?.repair || {});
   const original=(state.repairs || []).find(item=>item.id===repair.id);
+  if(session.role==="accounting")assertAccountingCorrection(original,repair);
   assertRepairEditable(original);
   if(repair.id&&!original?.correctionOpen)await customer.assertOpen(repair.id);
   repair=preserveInvoiceHistory(repair,original);
@@ -391,7 +393,7 @@ async function saveDrivewiseRepair(request, session) {
 
   if(existingIndex<0&&repair.recordType!=="shopSupply")throw Object.assign(Error("Create a pending customer application first."),{statusCode:409});
   if(existingIndex>=0){
-    await corrections.saveExisting(repair,request.body?.repair?.revision,initialCharge,session.username);
+    await corrections.saveExisting(repair,request.body?.repair?.revision,initialCharge,session.username,{correctionsOnly:session.role==="accounting"});
     return drivewiseState(session);
   }
 
@@ -440,7 +442,7 @@ async function updateDrivewiseInvoiceFile(request, session) {
   return drivewiseState(session);
 }
 
-async function uploadDrivewiseFile(request) {
+async function uploadDrivewiseFile(request,session) {
   const repairId = clean(request.body?.repairId);
   const invoiceId = clean(request.body?.invoiceId);
   const fileKind = clean(request.body?.fileKind);
@@ -451,6 +453,7 @@ async function uploadDrivewiseFile(request) {
     return {ok: false, error: "Choose a file to upload."};
   }
   const existing=(await readState()).repairs.find(r=>r.id===repairId);
+  if(session.role==="accounting")assertAccountingCorrection(existing);
   if(fileKind==='invoice'&&existing?.invoices?.find(i=>i.id===invoiceId)?.statementComplete)throw Object.assign(Error('Reverse the completed invoice before replacing its attachment.'),{statusCode:409});
   try {
     if (fileKind === "notes") {
@@ -831,7 +834,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
       await moveInvoice(request.body||{},session.username);sendJson(response,200,await drivewiseState(session));return;
     }
     if(request.method==='POST'&&path==='/drivewise-reopen-repair'){
-      const session=await requireAdmin(request,['full','admin','schedule']);
+      const session=await requireAdmin(request,['full','admin','schedule','accounting']);
       await corrections.reopen(clean(request.body?.repairId),request.body||{},session.username);
       sendJson(response,200,await drivewiseState(session));return;
     }
@@ -918,7 +921,7 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
     }
 
     if (request.method === "POST" && path === "/drivewise-repair") {
-      const session = await requireAdmin(request, ["full", "admin", "schedule"]);
+      const session = await requireAdmin(request, ["full", "admin", "schedule", "accounting"]);
       const result = await saveDrivewiseRepair(request, session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
@@ -946,8 +949,8 @@ exports.drivewiseApi = onRequest({cors: true, invoker: "public",timeoutSeconds:1
     }
 
     if (request.method === "POST" && path === "/drivewise-file-upload") {
-      await requireAdmin(request, ["full", "admin", "schedule"]);
-      const result = await uploadDrivewiseFile(request);
+      const session=await requireAdmin(request, ["full", "admin", "schedule", "accounting"]);
+      const result = await uploadDrivewiseFile(request,session);
       sendJson(response, result.ok ? 200 : 400, result);
       return;
     }

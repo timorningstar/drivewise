@@ -1,3 +1,4 @@
+const {assertAccountingCorrection}=require('./correction-access');
 const {randomUUID}=require('node:crypto');
 const {changeAccount}=require('./customer-account');
 const fail=(message,statusCode=400)=>{throw Object.assign(Error(message),{statusCode});};
@@ -116,11 +117,12 @@ function correctionService({db,stateRef,logChange}) {
      return {...state,repairs:state.repairs.map(r=>r.id===repairId?{...r,revision:version(r)+1,invoices:r.invoices.map(i=>i.id===invoiceId?next:i)}:r)};
    },actor,'Reverse invoice statement verification'),
    close:async(input,actor)=>mutate(state=>closeStatements(state,input,actor),actor,'Close invoices with vendor statement date'),
-   async saveExisting(incoming,revision,initialCharge,actor) {
+   async saveExisting(incoming,revision,initialCharge,actor,{correctionsOnly=false}={}) {
      return db.runTransaction(async tx=>{
        const ref=stateRef(),[snapshot,account,work]=await Promise.all([tx.get(ref),tx.get(accounts.doc(incoming.id)),tx.get(works.doc(incoming.id))]);
        const state=snapshot.data()?.state,existing=state?.repairs.find(r=>r.id===incoming.id);
        if(!existing)fail('This record no longer exists.',409);
+       if(correctionsOnly)assertAccountingCorrection(existing,incoming);
        if(version(existing)!==Number(revision||0))fail('This record changed while you were editing. Refresh it before saving.',409);
        if(!existing.correctionOpen&&(existing.historicalComplete||account.data()?.closedAt||existing.invoices?.some(i=>i.statementComplete)))fail('Reopen this repair for corrections before editing.',409);
        const safe=preserveInvoiceHistory(incoming,existing);

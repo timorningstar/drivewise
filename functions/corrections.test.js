@@ -57,3 +57,22 @@ test('stale repair form cannot overwrite a later invoice reversal and failed cor
  await assert.rejects(f.service.saveExisting(current,current.revision,'50','Repair Admin'),/less than/);
  assert.deepEqual(f.records.get('appState/drivewise').state.repairs[0],current);assert.equal(f.records.get('drivewiseCustomerAccounts/r1').chargeCents,10000);
 });
+
+const {assertAccountingCorrection}=require('./correction-access');
+test('Accounting corrects an explicitly reopened record, adds an invoice and preserves work completion, payments and audit history',async()=>{
+ const f=database(),original=structuredClone(f.records.get('appState/drivewise'));
+ const closedRepair=original.state.repairs[0];
+ await assert.rejects(f.service.saveExisting(closedRepair,closedRepair.revision,'','Accountant',{correctionsOnly:true}),{statusCode:403});assert.deepEqual(f.records.get('appState/drivewise'),original);
+ await f.service.reopen('r1',{reason:'Accountant adding a missing invoice'},'Accountant');
+ const opened=structuredClone(f.records.get('appState/drivewise').state.repairs[0]);assertAccountingCorrection(opened);
+ const file={name:'Sample invoice.pdf',storagePath:'drivewiseInvoices/r1/extra.pdf',bucket:'sample'};
+ await f.service.saveExisting({...opened,notes:'Corrected details',invoices:[...opened.invoices,{id:'extra',vendor:'Example vendor',invoiceNumber:'123',cost:25,invoiceFile:file}]},opened.revision,'125','Accountant',{correctionsOnly:true});
+ const saved=f.records.get('appState/drivewise').state.repairs[0];assert.equal(saved.correctionOpen,false);assert.equal(saved.historicalComplete,true);assert.equal(saved.invoices.length,2);assert.deepEqual(saved.invoices[0],closed());assert.equal(saved.correctionHistory[0].reason,'Accountant adding a missing invoice');assert.equal(saved.correctionHistory[0].finishedBy,'Accountant');assert.equal(f.records.get('drivewiseMechanicWork/r1').completedAt,'prior-completion');assert.equal(f.records.get('drivewiseCustomerAccounts/r1').payments.length,1);
+ await assert.rejects(f.service.saveExisting(saved,saved.revision,'125','Accountant',{correctionsOnly:true}),{statusCode:403});
+});
+test('Accounting correction checks reject new/closed/supply records and reclassification, including a stale open client form',async()=>{
+ for(const record of [undefined,{id:'r1'},{id:'r1',correctionOpen:'true'},{id:'s1',recordType:'shopSupply',correctionOpen:true}])assert.throws(()=>assertAccountingCorrection(record),{statusCode:403});
+ const f=database();await f.service.reopen('r1',{reason:'Correction'},'Accountant');const open=structuredClone(f.records.get('appState/drivewise').state.repairs[0]);
+ await assert.rejects(f.service.saveExisting({...open,recordType:'shopSupply'},open.revision,'','Accountant',{correctionsOnly:true}),{statusCode:403});
+ await f.service.saveExisting(open,open.revision,'','Repair Admin');await assert.rejects(f.service.saveExisting(open,open.revision,'','Accountant',{correctionsOnly:true}),{statusCode:403});
+});

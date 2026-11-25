@@ -1,3 +1,4 @@
+import{canReopenRepair,canEditRepair}from'./repair-correction-access'
 import CustomerPaymentSummary from './CustomerPaymentSummary'
 import RepairDateRange from './RepairDateRange'
 import MechanicPage from './MechanicPage'
@@ -752,12 +753,13 @@ function DrivewiseAdminApp() {
 
   const repairs = data?.repairs || []
   const canManageDrivewiseRepairs = ['full', 'admin', 'schedule'].includes(data?.role)
+  const canCorrectDrivewiseRepairs=canReopenRepair(data?.role)
   const canManageDrivewiseAccounting = ['full', 'admin', 'accounting'].includes(data?.role)
   const canManageMainAccount = !data?.hubSession && ['full', 'recovery'].includes(data?.role)
   const canManageRegularAdmins = !data?.hubSession && data?.role === 'full'
   const canDeleteUnlockedDrivewiseRecords = ['full', 'accounting'].includes(data?.role) || data?.accessLevels?.includes('accounting')
   const canViewDrivewiseRecords = data?.role !== 'recovery'
-  const isRepairFormReadOnly = repairForm.id && (!canManageDrivewiseRepairs || repairIsReadOnly(repairForm))
+  const isRepairFormReadOnly = repairForm.id && (!canEditRepair(data?.role,repairForm) || repairIsReadOnly(repairForm))
   const isNewVehicleRequest=repairForm.recordType!=='shopSupply'&&!repairs.some(repair=>repair.id===repairForm.id)
   const matchingVehicleRepairs = repairs.filter((repair) =>
     repair.id !== repairForm.id &&
@@ -1745,10 +1747,10 @@ function DrivewiseAdminApp() {
                       {repair.invoiceTransfers?.length>0&&<details className="invoice-history"><summary>Invoice movement history</summary>{repair.invoiceTransfers.map(entry=><article key={entry.operationId}><strong>{entry.by} · {new Date(entry.at).toLocaleString()}</strong><p>From: {entry.fromLabel}<br/>To: {entry.toLabel}</p><p>Reason: {entry.reason}</p></article>)}</details>}
                     </span>
                     <div>
-                      {canManageDrivewiseRepairs&&!repair.correctionOpen&&(repairIsReadOnly(repair)||vehicleRepairComplete(repair))&&<button className="text-action" type="button" onClick={()=>setCorrectionTarget({kind:'repair',repairId:repair.id,label:`${repair.ownerName} · ${vehicleLabel(repair)}`})}>Reopen for corrections</button>}
+                      {canCorrectDrivewiseRepairs&&!repair.correctionOpen&&(repairIsReadOnly(repair)||vehicleRepairComplete(repair))&&<button className="text-action" type="button" onClick={()=>setCorrectionTarget({kind:'repair',repairId:repair.id,label:`${repair.ownerName} · ${vehicleLabel(repair)}`})}>Reopen for corrections</button>}
                       {canManageDrivewiseRepairs&&!repair.historicalComplete&&!repairIsReadOnly(repair)&&(!WORKFLOW||repair.workflowStatus==='live')&&<><button className="text-action" type="button" onClick={()=>openMechanicShare(repair.id)}>Share with mechanic</button>
                       <button className="text-action" type="button" onClick={()=>revokeMechanicShare(repair.id)}>Revoke link</button></>}
-                      {!canManageDrivewiseRepairs || repairIsReadOnly(repair) ? (
+                      {!canEditRepair(data?.role,repair) || repairIsReadOnly(repair) ? (
                         <button className="text-action" onClick={() => viewRepair(repair)} type="button">View</button>
                       ) : (
                         <button className="text-action" onClick={() => editRepair(repair)} type="button">Edit</button>
